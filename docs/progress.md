@@ -1,6 +1,6 @@
 # Progress
 
-**Current status (2026-10-17): Phase 1 code is complete (slices 1A-1F plus closing work) and Phase 0 code is complete. Both are waiting on owner inputs listed under "What cannot be finished without the owner". Phase 2 has not been started.** Details in the Phase 1 section below.
+**Current status (2026-10-17): Phase 1 code is complete (slices 1A-1F plus closing work) and Phase 0 code is complete. Both are waiting on owner inputs listed under "What cannot be finished without the owner". Phase 2 was approved to start by the owner on 2026-10-17; the plan is in `docs/phase-2-plan.md`.** Details in the Phase 1 section below.
 
 ## Last verified checkpoint: Phase 0 — API foundation (2026-10-17)
 

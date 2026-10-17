@@ -6,7 +6,8 @@
   "scripts": {
     "start": "expo start --dev-client",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "lint": "oxlint -D correctness app src"
+    "lint": "oxlint -D correctness app src",
+    "eas-build-post-install": "pnpm --filter @gameverse/shared-types --filter @gameverse/design-system build"
   },
   "dependencies": {
     "@gameverse/design-system": "workspace:*",
