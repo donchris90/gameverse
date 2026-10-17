@@ -25,6 +25,8 @@ export function ReportPanel(props: {
   userId: string;
   username: string;
   messageId?: string;
+  /** Set when reporting from the voice panel, so moderators know the report is about voice. */
+  context?: 'voice';
   onClose: (sent: boolean) => void;
 }) {
   const [reason, setReason] = useState<ReportReason | null>(null);
@@ -101,7 +103,9 @@ export function ReportPanel(props: {
         onPress={() => {
           if (!reason) return;
           void run(async () => {
-            await social.report(props.userId, reason, details.trim() || null, props.messageId);
+            const text = details.trim();
+            const withContext = props.context === 'voice' ? `[voice] ${text}`.trim() : text;
+            await social.report(props.userId, reason, withContext || null, props.messageId);
             setSent(true);
           });
         }}

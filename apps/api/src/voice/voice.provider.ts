@@ -65,3 +65,18 @@ export class AgoraVoiceProvider extends VoiceProvider {
     };
   }
 }
+
+/** Deterministic stand-in for tests and local work: no vendor, no credentials, no network. */
+@Injectable()
+export class FakeVoiceProvider extends VoiceProvider {
+  issueToken(request: VoiceTokenRequest, now: Date = new Date()): VoiceTokenGrant {
+    const expireAt = Math.floor(now.getTime() / 1000) + request.ttlSeconds;
+    return {
+      appId: 'fake-app-id',
+      channel: request.channel,
+      uid: request.uid,
+      token: `fake.${request.channel}.${String(request.uid)}.${String(expireAt)}`,
+      expiresAt: new Date(expireAt * 1000),
+    };
+  }
+}

@@ -83,14 +83,15 @@ model User {
 
   deviceTokens DeviceToken[]
 
-  gameSeats   GameMatchPlayer[]
-  resultSeats GameResultPlayer[] @relation("ResultPlayerUser")
-  ratings     PlayerRating[]     @relation("PlayerRatingUser")
-  statistics  PlayerStatistics[] @relation("PlayerStatisticsUser")
-  experience  PlayerExperience?  @relation("PlayerExperienceUser")
-  hostedRooms GameRoom[]         @relation("RoomHost")
-  roomInvites GameRoom[]         @relation("RoomInvitee")
-  queueEntry  MatchQueueEntry?   @relation("QueueUser")
+  gameSeats     GameMatchPlayer[]
+  resultSeats   GameResultPlayer[] @relation("ResultPlayerUser")
+  ratings       PlayerRating[]     @relation("PlayerRatingUser")
+  statistics    PlayerStatistics[] @relation("PlayerStatisticsUser")
+  experience    PlayerExperience?  @relation("PlayerExperienceUser")
+  hostedRooms   GameRoom[]         @relation("RoomHost")
+  roomInvites   GameRoom[]         @relation("RoomInvitee")
+  queueEntry    MatchQueueEntry?   @relation("QueueUser")
+  voiceSessions VoiceSession[]
 
   @@index([status])
   @@map("users")
@@ -507,6 +508,7 @@ model GameMatch {
   game          Game              @relation(fields: [gameId], references: [id])
   players       GameMatchPlayer[]
   events        GameEvent[]
+  voiceSessions VoiceSession[]
   result        GameResult?
   rematchMatch  GameMatch?        @relation("Rematch", fields: [rematchMatchId], references: [id], onDelete: SetNull)
   rematchSource GameMatch?        @relation("Rematch")
@@ -686,4 +688,29 @@ model PlayerExperience {
   user User @relation("PlayerExperienceUser", fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("player_experience")
+}
+
+/// One stretch of voice by one player in one match: joined, then left. Usage metadata only (who,
+/// which match, how long); there is no audio recording anywhere. Kept when the account is deleted
+/// (userId becomes null) so usage totals stay correct.
+model VoiceSession {
+  id        String    @id @default(uuid(7)) @db.Uuid
+  matchId   String    @db.Uuid
+  userId    String?   @db.Uuid
+  /// The Agora uid used in the channel: seat + 1, so it is unique within a match.
+  agoraUid  Int
+  channel   String
+  joinedAt  DateTime  @db.Timestamptz(3)
+  leftAt    DateTime? @db.Timestamptz(3)
+  /// left (player), match_ended, blocked, timeout (sweeper).
+  endReason String?
+  /// Whole seconds between join and leave; set when the session closes.
+  seconds   Int?
+
+  match GameMatch @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  user  User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([matchId, leftAt])
+  @@index([userId, joinedAt])
+  @@map("voice_sessions")
 }

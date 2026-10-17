@@ -255,3 +255,19 @@ Result: 40/40 matches finished, 3585 requests in 25.5 s (about 140 req/s). Laten
 Found and fixed by this run: the first run gave 500s on queue joins and room joins under that stampede (serializable retries ran out). Backoff now has full jitter and exhaustion returns 503 (decision 71). Earlier runs: 28/40 matches before the fix.
 
 Limits: nothing here has run on a phone; the load test is one burst on one machine and says nothing about Render/Supabase latency; the busy responses show serializable matchmaking contends under bursts, so a real launch should re-measure on the deployed stack. Friend invites are sent from the profile only (no picker in the Play tab).
+
+## Phase 3: voice in matches (code done, 2026-10-18; **voice itself is UNVERIFIED on devices and against real Agora**)
+
+Built: migration `20261019000000_voice` (hand-written; `migrate deploy` and drift check unverified) with `voice_sessions`; `POST /v1/matches/:id/voice/token|joined|left`; `FakeVoiceProvider` (`VOICE_PROVIDER=fake`, refused in staging/production); sweeper closing sessions of finished matches; shared-types `VoiceController` (permission, token, renewal, reconnect, mute, leave, usage reports) over a `VoiceEngine` seam plus a state reducer; mobile Agora engine, microphone permission helper, Android foreground-service keep-alive (notifee + config plugin), iOS `audio` background mode, and a voice panel on the match screen (join/leave/mute, participant list, speaker indicator, permission-denied help, report and block). Voice is opt-in per match, humans only, nothing is recorded.
+
+| Command                                                                                  | Result                                                                                                                                                |
+| ---------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npx prettier --check .` then `npx turbo run lint typecheck build test --env-mode=loose` | clean; 22/22 tasks (api 132, shared-types 89, design-system 24, game-rules 41)                                                                        |
+| `pnpm --filter @gameverse/api test:integration`                                          | 20 files, **473/473 passed** (18 new in `voice.e2e-spec.ts`)                                                                                          |
+| `pnpm --filter @gameverse/api smoke:dist`                                                | compiled API is up and ready                                                                                                                          |
+| `expo prebuild --platform android --no-install`                                          | succeeded; manifest has RECORD_AUDIO, FOREGROUND_SERVICE_MICROPHONE and the notifee service with type microphone (generated files removed afterwards) |
+| Mobile `tsc --noEmit`, `oxlint -D correctness`                                           | clean                                                                                                                                                 |
+
+Mutation checks: API 12/12 caught (membership, open-match, bot, block, limiter, idempotent join, left membership, negative time, sweeper end, timeout, renew time, end time); phone-side 16/16 caught after adding one test (a leave during the microphone prompt) and fixing one mutation pattern.
+
+Not verified (see `docs/voice-verification.md`): Agora accepting our tokens, audio between phones, mute/leave/reconnect on devices, token renewal after 9 minutes, Android foreground service and iOS background audio, low-end Android, report/block in a call, the Phase 0 spike itself. Limit: a blocked player's call is not cut server-side until their next token renewal.

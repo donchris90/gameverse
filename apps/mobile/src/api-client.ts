@@ -12,6 +12,8 @@ import type {
   MatchmakingStatus,
   MyProgress,
   RoomView,
+  VoiceSessionView,
+  VoiceTokenView,
   MessageView,
   Page,
   PresenceEntry,
@@ -139,3 +141,11 @@ export const games = {
   leaderboard: (gameId: GameId, offset = 0) =>
     request<LeaderboardView>('GET', `/v1/leaderboards/${gameId}${qs({ limit: 20, offset })}`),
 };
+
+export const voiceApi = (matchId: string) => ({
+  token: () => request<VoiceTokenView>('POST', `/v1/matches/${matchId}/voice/token`, { body: {} }),
+  joined: () =>
+    request<VoiceSessionView>('POST', `/v1/matches/${matchId}/voice/joined`, { body: {} }),
+  left: () =>
+    request<{ closed: number }>('POST', `/v1/matches/${matchId}/voice/left`, { body: {} }),
+});

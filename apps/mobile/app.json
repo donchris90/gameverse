@@ -6,7 +6,7 @@
     "version": "0.1.0",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
-    "plugins": ["expo-router", "expo-dev-client"],
+    "plugins": ["expo-router", "expo-dev-client", "./plugins/with-voice-foreground-service"],
     "experiments": {
       "typedRoutes": true
     },
@@ -14,12 +14,20 @@
       "bundleIdentifier": "com.gameverse.app.dev",
       "supportsTablet": false,
       "infoPlist": {
-        "NSMicrophoneUsageDescription": "GameVerse uses the microphone for voice chat in matches."
+        "NSMicrophoneUsageDescription": "GameVerse uses the microphone for voice chat in matches.",
+        "UIBackgroundModes": ["audio"]
       }
     },
     "android": {
       "package": "com.gameverse.app.dev",
-      "permissions": ["RECORD_AUDIO", "MODIFY_AUDIO_SETTINGS", "INTERNET"]
+      "permissions": [
+        "RECORD_AUDIO",
+        "MODIFY_AUDIO_SETTINGS",
+        "INTERNET",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_MICROPHONE",
+        "POST_NOTIFICATIONS"
+      ]
     }
   }
 }

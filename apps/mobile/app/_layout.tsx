@@ -3,6 +3,10 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SessionProvider, useSession } from '../src/session';
 import { Loading } from '../src/ui';
+import { registerVoiceKeepAlive } from '../src/voice/keep-alive';
+
+// Must run once when the app starts so Android can run the voice foreground service.
+registerVoiceKeepAlive();
 
 function Routes() {
   const { state } = useSession();

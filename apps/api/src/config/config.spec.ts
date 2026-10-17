@@ -103,6 +103,13 @@ describe('loadConfig', () => {
       expect(errorMessageFor({ ...deployed, NODE_ENV: 'staging' })).toContain('EMAIL_PROVIDER');
     });
 
+    it('refuses the fake voice provider', () => {
+      expect(errorMessageFor({ ...deployed, VOICE_PROVIDER: 'fake' })).toContain('VOICE_PROVIDER');
+      expect(
+        errorMessageFor({ ...deployed, NODE_ENV: 'staging', VOICE_PROVIDER: 'fake' }),
+      ).toContain('VOICE_PROVIDER');
+    });
+
     it('requires an API key and a real sender when using the resend provider', () => {
       const resend = {
         ...deployed,

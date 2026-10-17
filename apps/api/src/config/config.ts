@@ -49,6 +49,10 @@ const envSchema = z
 
     AGORA_APP_ID: z.string().trim().optional(),
     AGORA_APP_CERTIFICATE: z.string().trim().optional(),
+    /** agora = real tokens. fake = deterministic tokens for tests and local development only. */
+    VOICE_PROVIDER: z.enum(['agora', 'fake']).default('agora'),
+    /** Lifetime of a match voice token; the app renews it before it expires. */
+    VOICE_MATCH_TOKEN_TTL_SECONDS: z.coerce.number().int().min(60).max(3600).default(600),
     VOICE_TOKEN_TTL_SECONDS: z.coerce.number().int().min(60).max(86_400).default(3600),
     /** Enables the Phase 0 voice spike token endpoint. Development and test only. */
     VOICE_SPIKE_ENABLED: booleanString,
@@ -103,6 +107,13 @@ const envSchema = z
           code: 'custom',
           path: ['PUSH_PROVIDER'],
           message: 'the in-memory push provider is for tests only',
+        });
+      }
+      if (config.VOICE_PROVIDER === 'fake') {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['VOICE_PROVIDER'],
+          message: 'the fake voice provider is for tests and local development only',
         });
       }
       if (config.VOICE_SPIKE_ENABLED) {
