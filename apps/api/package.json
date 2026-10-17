@@ -11,6 +11,7 @@
     "lint": "oxlint -D correctness src test prisma prisma.config.ts",
     "start": "nest start",
     "start:dev": "nest start --watch",
+    "serve": "tsc -p tsconfig.build.json --incremental false && node dist/main.js",
     "start:prod": "node dist/main.js",
     "smoke:dist": "bash scripts/smoke-dist.sh",
     "test": "vitest run",
