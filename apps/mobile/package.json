@@ -1,0 +1,31 @@
+{
+  "name": "@gameverse/mobile",
+  "version": "0.1.0",
+  "private": true,
+  "main": "expo-router/entry",
+  "scripts": {
+    "start": "expo start --dev-client",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "oxlint -D correctness app src"
+  },
+  "dependencies": {
+    "@gameverse/design-system": "workspace:*",
+    "@gameverse/shared-types": "workspace:*",
+    "expo": "58.0.14",
+    "expo-constants": "~58.0.12",
+    "expo-dev-client": "~58.0.14",
+    "expo-linking": "~58.0.13",
+    "expo-router": "~58.0.23",
+    "expo-status-bar": "~58.0.3",
+    "react": "19.3.0",
+    "react-native": "0.88.0",
+    "react-native-agora": "4.6.4",
+    "react-native-safe-area-context": "~5.10.1",
+    "react-native-screens": "~4.30.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "oxlint": "^1.58.0",
+    "typescript": "^6.0.2"
+  }
+}

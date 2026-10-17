@@ -4,11 +4,11 @@
 
 ```
 apps/api            NestJS REST API (ESM, Express 5), Prisma 7, PostgreSQL 16
-apps/mobile         Expo dev build (scaffold, see progress.md)
-apps/admin          Refine admin (scaffold, see progress.md)
+apps/mobile         Expo SDK 58 dev build + Expo Router (scaffold)
+apps/admin          Vite + Refine admin (static shell until Phase 1)
 packages/shared-types   zod schemas + error codes shared by API and clients
 packages/design-system  dark-first design tokens + WCAG contrast helpers
-packages/game-rules     pure game logic (Phase 2+)
+packages/game-rules     pure game logic (created in Phase 2)
 ```
 
 ## API layout (`apps/api/src`)

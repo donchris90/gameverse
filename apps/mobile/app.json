@@ -1,0 +1,14 @@
+{
+  "expo": {
+    "name": "GameVerse",
+    "slug": "gameverse",
+    "scheme": "gameverse",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "plugins": ["expo-router", "expo-dev-client"],
+    "experiments": { "typedRoutes": true },
+    "ios": { "bundleIdentifier": "com.gameverse.app.dev", "supportsTablet": false },
+    "android": { "package": "com.gameverse.app.dev" }
+  }
+}

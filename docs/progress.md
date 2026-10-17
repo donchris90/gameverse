@@ -2,7 +2,7 @@
 
 ## Last verified checkpoint: Phase 0 — API foundation (2026-10-17)
 
-Phase 0 is **not complete**. The API, shared packages and CI are done and verified here; the mobile app, admin app, `game-rules` package and the Agora spike are not started.
+Phase 0 is **not complete**. The API, shared packages, CI, and mobile/admin scaffolds are in place and verified as far as stated below; the `game-rules` package (deferred to Phase 2, nothing to put in it yet) and the Agora spike are not done.
 
 ### Commands run and real results (sandbox, local PostgreSQL 16)
 
@@ -16,6 +16,14 @@ Phase 0 is **not complete**. The API, shared packages and CI are done and verifi
 | `pnpm db:seed` (dev) / with `NODE_ENV=production`                                           | seeds 3 local users / refuses to run                                                                 |
 
 Mutation checks: five deliberately introduced bugs were each caught by the suite (5/5), then reverted; the unit and integration suites were re-run green afterwards (rows above).
+
+### Mobile and admin scaffolds
+
+- `apps/mobile`: Expo SDK 58, Expo Router, `expo-dev-client`, `react-native-agora` 4.6.4 installed (not yet used). One screen that calls the API `/health/ready` and reports the real result. `tsc` and `oxlint` clean; `expo export --platform android` produced a Hermes bundle. **Never run on a device or emulator.**
+- `react-native-agora` is not in Expo's SDK 58 version table; 4.6.4 is simply the latest on npm. Compatibility with React Native 0.88 is **unverified** until the spike runs. `expo install` was blocked by the sandbox proxy, so versions were taken from `expo/bundledNativeModules.json`.
+- `apps/admin`: Vite + React 19 + Refine installed; a static shell only (no admin features until Phase 1). `tsc`, `oxlint` and `vite build` clean. Not opened in a browser.
+- pnpm prints an unmet-peer warning (`react@^19.3.1` found 19.3.0) from the mobile tree because Expo pins React 19.3.0. Left as is.
+- Full run after adding them: `npx prettier --check . && npx turbo run lint typecheck build test --env-mode=loose` -> exit 0, 18/18 tasks.
 
 ### Caveats about how verification was done
 
@@ -32,12 +40,10 @@ Mutation checks: five deliberately introduced bugs were each caught by the suite
 
 ### Remaining for Phase 0
 
-1. Scaffold `apps/mobile` (Expo dev build, Expo Router, `react-native-agora`) and `apps/admin` (Refine); typecheck only here.
-2. Scaffold `packages/game-rules`.
-3. Backend Agora token endpoint, then the two-phone spike (needs Agora App ID/certificate and two physical phones, one low-end Android).
-4. Push to GitHub and confirm CI is green (owner action: create the repo).
-5. Owner checkpoint: review schema, auth design, spike result.
+1. Backend Agora token endpoint, then the two-phone spike (needs Agora App ID/certificate and two physical phones, one low-end Android).
+2. Push to GitHub and confirm CI is green (owner action: create the repo).
+3. Owner checkpoint: review schema, auth design, spike result.
 
 ### Next exact action
 
-Scaffold the mobile and admin apps and `packages/game-rules`, commit, then ask the owner for Agora credentials and devices.
+Build the backend Agora token endpoint behind a `VoiceProvider` interface, then ask the owner for Agora credentials and two phones to run the spike.
