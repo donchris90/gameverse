@@ -74,6 +74,10 @@ model User {
   conversationMembers ConversationMember[]
   messagesSent        Message[]
 
+  reportsMade    ModerationReport[] @relation("ReportReporter")
+  reportsAgainst ModerationReport[] @relation("ReportReported")
+  moderationActionsAgainst ModerationAction[]
+
   @@index([status])
   @@map("users")
 }
@@ -295,4 +299,91 @@ model Message {
   @@index([conversationId, id])
   @@index([senderId, createdAt])
   @@map("messages")
+}
+
+enum ReportReason {
+  HARASSMENT
+  HATE
+  SEXUAL_CONTENT
+  SPAM
+  IMPERSONATION
+  UNDERAGE
+  CHEATING
+  OTHER
+}
+
+enum ReportStatus {
+  OPEN
+  RESOLVED
+  DISMISSED
+}
+
+enum ModerationActionType {
+  SUSPEND
+  BAN
+  REINSTATE
+}
+
+model ModerationReport {
+  id             String       @id @default(uuid(7)) @db.Uuid
+  reporterId     String       @db.Uuid
+  reportedUserId String       @db.Uuid
+  reason         ReportReason
+  details        String?      @db.VarChar(500)
+  status         ReportStatus @default(OPEN)
+
+  /// Set for message reports. Not a foreign key: the snapshot below is the evidence.
+  messageId       String? @db.Uuid
+  messageSnapshot String? @db.VarChar(2000)
+  /// Up to five earlier messages in the same conversation, so moderators can judge context.
+  contextSnapshot Json?
+
+  /// "reporter:reported:message-or-user" while OPEN, null once closed. Unique, so the same person
+  /// cannot queue the same report twice, even by racing requests.
+  dedupeKey String? @unique
+
+  createdAt      DateTime  @default(now()) @db.Timestamptz(3)
+  resolvedAt     DateTime? @db.Timestamptz(3)
+  /// Staff account ids are plain columns (no foreign key) so history survives staff changes.
+  resolvedById   String?   @db.Uuid
+  resolutionNote String?   @db.VarChar(500)
+
+  reporter User @relation("ReportReporter", fields: [reporterId], references: [id], onDelete: Cascade)
+  reported User @relation("ReportReported", fields: [reportedUserId], references: [id], onDelete: Cascade)
+
+  @@index([status, id])
+  @@index([reportedUserId])
+  @@index([reporterId, createdAt])
+  @@map("moderation_reports")
+}
+
+model ModerationAction {
+  id           String               @id @default(uuid(7)) @db.Uuid
+  moderatorId  String               @db.Uuid
+  targetUserId String               @db.Uuid
+  type         ModerationActionType
+  reason       String               @db.VarChar(500)
+  reportId     String?              @db.Uuid
+  createdAt    DateTime             @default(now()) @db.Timestamptz(3)
+
+  target User @relation(fields: [targetUserId], references: [id], onDelete: Cascade)
+
+  @@index([targetUserId, createdAt])
+  @@map("moderation_actions")
+}
+
+/// Append-only (a database trigger rejects UPDATE and DELETE). No foreign keys, so history is
+/// never lost or cascaded away.
+model AuditLog {
+  id         String   @id @default(uuid(7)) @db.Uuid
+  actorId    String?  @db.Uuid
+  action     String
+  targetType String
+  targetId   String?  @db.Uuid
+  metadata   Json?
+  createdAt  DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([targetId, id])
+  @@index([actorId, id])
+  @@map("audit_logs")
 }

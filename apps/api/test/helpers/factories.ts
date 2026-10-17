@@ -139,3 +139,10 @@ export async function openConversation(
 export function newClientMessageId(): string {
   return crypto.randomUUID();
 }
+
+/** An onboarded account promoted to the given staff role directly in the database. */
+export async function makeStaff(t: TestApp, role: 'MODERATOR' | 'ADMIN'): Promise<SocialUser> {
+  const user = await registerWithProfile(t);
+  await t.prisma.user.update({ where: { id: user.id }, data: { role } });
+  return user;
+}

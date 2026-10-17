@@ -62,4 +62,7 @@ export async function createTestApp(
 /** Removes every account (and, by cascade, tokens and identities). */
 export async function resetDatabase(prisma: PrismaService): Promise<void> {
   await prisma.user.deleteMany();
+  // audit_logs is append-only (a trigger rejects DELETE) and has no foreign keys; TRUNCATE is the
+  // one way to clear it, and it is only ever run against the *_test database.
+  await prisma.$executeRawUnsafe('TRUNCATE TABLE audit_logs');
 }

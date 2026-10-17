@@ -14,6 +14,7 @@ import { ProfilesModule } from './profiles/profiles.module.js';
 import { SocialModule } from './social/social.module.js';
 import { ChatModule } from './chat/chat.module.js';
 import { RealtimeModule } from './realtime/realtime.module.js';
+import { ModerationModule } from './moderation/moderation.module.js';
 import { UsersModule } from './users/users.module.js';
 import { VoiceModule } from './voice/voice.module.js';
 
@@ -69,6 +70,7 @@ export class AppModule {
         SocialModule,
         RealtimeModule,
         ChatModule,
+        ModerationModule,
         UsersModule,
         VoiceModule,
         HealthModule,

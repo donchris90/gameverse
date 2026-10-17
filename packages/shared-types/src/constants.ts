@@ -60,3 +60,23 @@ export const MESSAGE_MAX_LENGTH = 2000;
 /** At most this many messages per sender in the burst window (checked server-side). */
 export const MESSAGE_BURST_LIMIT = 20;
 export const MESSAGE_BURST_WINDOW_SECONDS = 10;
+
+export const REPORT_REASONS = [
+  'HARASSMENT',
+  'HATE',
+  'SEXUAL_CONTENT',
+  'SPAM',
+  'IMPERSONATION',
+  'UNDERAGE',
+  'CHEATING',
+  'OTHER',
+] as const;
+export type ReportReason = (typeof REPORT_REASONS)[number];
+
+export const REPORT_STATUSES = ['OPEN', 'RESOLVED', 'DISMISSED'] as const;
+export type ReportStatus = (typeof REPORT_STATUSES)[number];
+
+export const MAX_REPORTS_PER_DAY = 20;
+export const REPORT_DETAILS_MAX_LENGTH = 500;
+export const MODERATION_REASON_MIN_LENGTH = 3;
+export const MODERATION_REASON_MAX_LENGTH = 500;
