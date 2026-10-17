@@ -1,6 +1,6 @@
 # Progress
 
-**Current status (2026-10-17): Phase 1 code is complete (slices 1A-1F) and waiting at the owner checkpoint. Phase 2 has not been started.** Details in the Phase 1 section below.
+**Current status (2026-10-17): Phase 1 code is complete (slices 1A-1F plus closing work) and Phase 0 code is complete. Both are waiting on owner inputs listed under "What cannot be finished without the owner". Phase 2 has not been started.** Details in the Phase 1 section below.
 
 ## Last verified checkpoint: Phase 0 — API foundation (2026-10-17)
 
@@ -103,13 +103,29 @@ Started 2026-10-17 on the owner's go-ahead ("can we start building?"). Phase 0 i
 | Admin ban revokes access immediately           | `moderation` suite, plus the manual browser run above                    |
 | Cross-user message access fails closed         | `chat` suite                                                             |
 
-### Still unverified or not built (be aware before relying on Phase 1)
+### Closing work done after the checkpoint request (2026-10-17)
 
-- Not built: mobile screens for email verification, forgot/reset password, and Google/Apple sign-in (the API supports them). Email-based sign-up works but cannot yet finish verification from the phone.
-- The emailed links (`PUBLIC_WEB_URL/verify-email`, `/reset-password`, `/delete-account`) are web URLs. Nothing yet opens them in the app: universal / app links or a small web landing page are needed before real users can follow them.
-- Google and Apple tokens, real email delivery, live Expo push, Agora voice, GitHub CI first run, Prisma drift check: all still unverified (see Phase 0 list).
-- The profanity list is a starter and needs curation by a moderator; terms version `draft-1` is a placeholder and the Terms / Privacy Policy text does not exist yet.
-- Account deletion keeps reports, moderation actions and the audit log; the privacy policy must say so.
+- **Email links now work end to end in code.** Emails point to `PUBLIC_WEB_URL/verify-email|reset-password|delete-account`. The API serves small no-store, noindex, strict-CSP landing pages there with an "Open GameVerse" button to `gameverse://...` (token checked against a strict pattern before it is placed in the page). 7 integration tests; loosening the pattern made 3 fail (mutation check). Replace with universal / app links once a domain exists.
+- **Mobile screens added**: verify email, forgot password, reset password, and a "send verification email" prompt in Settings. Typecheck, lint and the Android bundle pass; not run on a device.
+- **Real email provider code added** (`EMAIL_PROVIDER=resend`): tested against a local stand-in only (3 tests), **unverified against the live service**. Staging/production now refuse console/memory and require `RESEND_API_KEY` and a real sender (config tests).
+- **Account deletion** no longer locks the player out for a minute when the email fails to send: the link is dropped and the API answers 503 (1 new test).
+- **Draft Terms of Service and Privacy Policy** in `docs/legal/`, written to match what the code actually stores. They are drafts for a lawyer; nothing serves them yet and the terms version is still `draft-1`.
+
+Gate after this work: prettier clean; `npx turbo run lint typecheck build test --env-mode=loose` 18/18 (unit: design-system 24, shared-types 23, api 104); `pnpm --filter @gameverse/api test:integration` **276/276**; `smoke:dist` OK.
+
+### What cannot be finished without the owner
+
+| Item                             | What is needed                                                                                                                             |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| Voice spike (Phase 0)            | Agora App ID + certificate, two physical phones (one low-end Android)                                                                      |
+| First CI run, Prisma drift check | A GitHub repository. The token available to the agent is invalid, so the owner must create the repo and push (or provide a working token). |
+| Real email                       | A Resend account (or another provider; the interface is small), API key, and a sending domain with DNS records verified                    |
+| Google / Apple sign-in           | Google OAuth client ids and Apple Services id / bundle id; mobile sign-in buttons are not built because they cannot be tested without them |
+| Push on a real phone             | An Expo (EAS) project id and APNs / FCM credentials, plus a physical device                                                                |
+| Word list                        | A human moderator to curate the starter blocklist (including Pidgin, Yoruba, Igbo, Hausa)                                                  |
+| Legal                            | Lawyer review of `docs/legal/*`, then publish and bump the terms version                                                                   |
+| Mobile on a device               | Someone to run the app on a phone or emulator and report what is broken                                                                    |
+| Phase 0 and Phase 1 checkpoints  | Owner review and approval                                                                                                                  |
 
 ### Next exact action
 

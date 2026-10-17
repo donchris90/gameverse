@@ -60,7 +60,7 @@ export class AccountService {
     }
 
     const { raw, hash } = this.tokens.generateOpaqueToken();
-    await this.prisma.$transaction([
+    const [, created] = await this.prisma.$transaction([
       this.prisma.oneTimeToken.deleteMany({
         where: { userId, type: 'ACCOUNT_DELETION', usedAt: null },
       }),
@@ -73,7 +73,18 @@ export class AccountService {
         },
       }),
     ]);
-    await this.mail.sendAccountDeletionEmail(user.email, raw);
+    try {
+      await this.mail.sendAccountDeletionEmail(user.email, raw);
+    } catch {
+      // The link never left the building: drop it so the player can retry straight away instead
+      // of waiting out the cooldown, and say plainly that nothing was sent.
+      await this.prisma.oneTimeToken.delete({ where: { id: created.id } }).catch(() => undefined);
+      throw new AppException(
+        HttpStatus.SERVICE_UNAVAILABLE,
+        ErrorCode.SERVICE_UNAVAILABLE,
+        'We could not send the email right now. Please try again in a few minutes.',
+      );
+    }
     return { message: 'We emailed you a link to confirm deleting your account' };
   }
 

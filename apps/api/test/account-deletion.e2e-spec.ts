@@ -62,6 +62,22 @@ describe('account deletion', () => {
     });
   });
 
+  it('a failed email send leaves no usable link and does not lock the player out of retrying', async () => {
+    const a = await registerWithProfile(t);
+    const original = t.email.send.bind(t.email);
+    t.email.send = () => Promise.reject(new Error('mail provider down'));
+    try {
+      const failed = await requestLink(a).expect(503);
+      expect(failed.body.error.code).toBe('SERVICE_UNAVAILABLE');
+    } finally {
+      t.email.send = original;
+    }
+    expect(
+      await t.prisma.oneTimeToken.count({ where: { userId: a.id, type: 'ACCOUNT_DELETION' } }),
+    ).toBe(0);
+    await requestLink(a).expect(202); // no cooldown from the failed attempt
+  });
+
   it('confirm validates input and rejects wrong, foreign, used and expired tokens identically', async () => {
     const a = await registerWithProfile(t);
     const b = await registerWithProfile(t);

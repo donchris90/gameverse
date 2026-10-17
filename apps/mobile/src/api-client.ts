@@ -1,4 +1,5 @@
 import type {
+  AccountView,
   ConversationPage,
   ConversationView,
   FriendRequestResult,
@@ -76,4 +77,21 @@ export const me = {
   registerDevice: (token: string, platform: 'IOS' | 'ANDROID') =>
     request<void>('PUT', '/v1/me/devices', { body: { token, platform } }),
   unregisterDevice: (token: string) => request<void>('DELETE', `/v1/me/devices${qs({ token })}`),
+};
+
+export const accountApi = {
+  verifyEmail: (token: string) =>
+    request<{ message: string }>('POST', '/v1/auth/verify-email', { body: { token }, auth: false }),
+  resendVerification: () => request<{ message: string }>('POST', '/v1/auth/resend-verification'),
+  forgotPassword: (email: string) =>
+    request<{ message: string }>('POST', '/v1/auth/forgot-password', {
+      body: { email },
+      auth: false,
+    }),
+  resetPassword: (token: string, newPassword: string) =>
+    request<{ message: string }>('POST', '/v1/auth/reset-password', {
+      body: { token, newPassword },
+      auth: false,
+    }),
+  account: () => request<AccountView>('GET', '/v1/me'),
 };

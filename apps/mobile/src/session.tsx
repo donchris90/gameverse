@@ -1,7 +1,7 @@
 import type { AuthSession, ProfileView } from '@gameverse/shared-types';
 import type { ReactNode } from 'react';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { me } from './api-client';
+import { accountApi, me } from './api-client';
 import {
   ApiError,
   adoptSession,
@@ -33,6 +33,8 @@ interface SessionApi {
   profileSaved: (profile: ProfileView) => void;
   /** Clears local state after the server has already ended the session (deleted account, etc.). */
   localSignOut: () => Promise<void>;
+  /** Re-reads the account (for example after the email was verified). */
+  reloadAccount: () => Promise<void>;
 }
 
 const SessionContext = createContext<SessionApi | null>(null);
@@ -157,6 +159,14 @@ export function SessionProvider({ children }: { children: ReactNode }) {
             : { status: 'ready', user: current.user, profile },
         ),
       localSignOut,
+      reloadAccount: async () => {
+        const user = await accountApi.account();
+        setState((current) =>
+          current.status === 'ready' || current.status === 'needs-profile'
+            ? { ...current, user }
+            : current,
+        );
+      },
     }),
     [state, begin, localSignOut],
   );

@@ -32,6 +32,9 @@ function Routes() {
         <Stack.Screen name="blocked" options={{ title: 'Blocked players' }} />
         <Stack.Screen name="delete-account" options={{ title: 'Delete account' }} />
       </Stack.Protected>
+      {/* Reachable from email links whether or not anyone is signed in. */}
+      <Stack.Screen name="verify-email" options={{ title: 'Verify email' }} />
+      <Stack.Screen name="reset-password" options={{ title: 'Reset password' }} />
       <Stack.Protected guard={__DEV__}>
         <Stack.Screen name="dev-tools" options={{ title: 'Developer tools' }} />
         <Stack.Screen name="voice-spike" options={{ title: 'Voice spike' }} />

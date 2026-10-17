@@ -8,7 +8,7 @@ import { theme } from '@gameverse/design-system';
 import { Link, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
-import { me } from '../../src/api-client';
+import { accountApi, me } from '../../src/api-client';
 import { registerForPush, type PushRegistration } from '../../src/push';
 import { useReadySession, useSession } from '../../src/session';
 import { Avatar, Body, Button, ErrorText, Loading, Screen, useAction, useLoad } from '../../src/ui';
@@ -75,6 +75,8 @@ export default function Settings() {
   const { data: settings, setData, error, loading } = useLoad(load);
   const save = useAction();
   const deletion = useAction();
+  const verify = useAction();
+  const [verifyNote, setVerifyNote] = useState<string | null>(null);
   const [deletionNote, setDeletionNote] = useState<string | null>(null);
   const [push, setPush] = useState<PushRegistration | null>(null);
 
@@ -102,6 +104,28 @@ export default function Settings() {
             <Text style={{ color: theme.colors.textSecondary }}>{user.email}</Text>
           </View>
         </View>
+
+        {!user.emailVerified && (
+          <View style={{ marginBottom: theme.spacing.lg }}>
+            <Body muted>Your email address is not verified yet.</Body>
+            <ErrorText error={verify.error} />
+            {verifyNote ? (
+              <Body muted>{verifyNote}</Body>
+            ) : (
+              <Button
+                label="Send verification email"
+                tone="secondary"
+                busy={verify.busy}
+                onPress={() =>
+                  void verify.run(async () => {
+                    const result = await accountApi.resendVerification();
+                    setVerifyNote(result.message);
+                  })
+                }
+              />
+            )}
+          </View>
+        )}
 
         <Text
           accessibilityRole="header"

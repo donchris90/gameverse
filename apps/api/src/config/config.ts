@@ -41,8 +41,11 @@ const envSchema = z
     PUBLIC_WEB_URL: z.url().default('http://localhost:3000'),
     CORS_ORIGINS: csv,
 
-    EMAIL_PROVIDER: z.enum(['console', 'memory']).default('console'),
+    /** console / memory are development and test stubs. resend sends real email over HTTPS. */
+    EMAIL_PROVIDER: z.enum(['console', 'memory', 'resend']).default('console'),
     EMAIL_FROM: z.string().min(3).default('GameVerse <no-reply@example.invalid>'),
+    RESEND_API_KEY: z.string().trim().optional(),
+    RESEND_API_URL: z.url().default('https://api.resend.com/emails'),
 
     AGORA_APP_ID: z.string().trim().optional(),
     AGORA_APP_CERTIFICATE: z.string().trim().optional(),
@@ -71,15 +74,30 @@ const envSchema = z
 
     const deployed = config.NODE_ENV === 'staging' || config.NODE_ENV === 'production';
     if (deployed) {
-      // Both available providers ("console", "memory") are development-only stubs. Until a real
-      // provider is integrated, staging/production must refuse to start rather than silently
-      // drop or print verification and password-reset emails.
-      ctx.addIssue({
-        code: 'custom',
-        path: ['EMAIL_PROVIDER'],
-        message:
-          'no production email provider is integrated yet; development providers are not allowed in staging/production',
-      });
+      // The console and memory providers print or drop verification and reset links, so a
+      // deployed server must use a real provider with a real sender address.
+      if (config.EMAIL_PROVIDER !== 'resend') {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['EMAIL_PROVIDER'],
+          message: 'development email providers are not allowed in staging/production; use resend',
+        });
+      } else {
+        if (!config.RESEND_API_KEY) {
+          ctx.addIssue({
+            code: 'custom',
+            path: ['RESEND_API_KEY'],
+            message: 'required when EMAIL_PROVIDER=resend',
+          });
+        }
+        if (config.EMAIL_FROM.includes('example.invalid')) {
+          ctx.addIssue({
+            code: 'custom',
+            path: ['EMAIL_FROM'],
+            message: 'set a real sender address on a domain verified with the email provider',
+          });
+        }
+      }
       if (config.PUSH_PROVIDER === 'memory') {
         ctx.addIssue({
           code: 'custom',

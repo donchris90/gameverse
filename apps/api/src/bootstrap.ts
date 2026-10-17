@@ -7,8 +7,10 @@ import type { AppConfig } from './config/config.js';
 export function configureApp(app: NestExpressApplication, config: AppConfig): void {
   app.useLogger(app.get(Logger));
 
-  // Versioned API; probes stay at /health/*.
-  app.setGlobalPrefix('v1', { exclude: ['health/live', 'health/ready'] });
+  // Versioned API; probes stay at /health/* and the email-link landing pages at their own paths.
+  app.setGlobalPrefix('v1', {
+    exclude: ['health/live', 'health/ready', 'verify-email', 'reset-password', 'delete-account'],
+  });
 
   // Only trust X-Forwarded-* when explicitly running behind a known proxy; otherwise clients could
   // spoof their IP and defeat per-IP rate limits.

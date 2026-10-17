@@ -93,7 +93,7 @@ describe('loadConfig', () => {
       PUBLIC_WEB_URL: 'https://gameverse.test',
     };
 
-    it('refuses to start with a development email provider, since no real provider exists yet', () => {
+    it('refuses to start with a development email provider', () => {
       expect(errorMessageFor({ ...deployed, EMAIL_PROVIDER: 'console' })).toContain(
         'EMAIL_PROVIDER',
       );
@@ -101,6 +101,23 @@ describe('loadConfig', () => {
         'EMAIL_PROVIDER',
       );
       expect(errorMessageFor({ ...deployed, NODE_ENV: 'staging' })).toContain('EMAIL_PROVIDER');
+    });
+
+    it('requires an API key and a real sender when using the resend provider', () => {
+      const resend = {
+        ...deployed,
+        EMAIL_PROVIDER: 'resend',
+        EMAIL_FROM: 'GameVerse <no-reply@gameverse.test>',
+      };
+      expect(errorMessageFor(resend)).toContain('RESEND_API_KEY');
+      expect(
+        errorMessageFor({
+          ...resend,
+          RESEND_API_KEY: 're_test_key',
+          EMAIL_FROM: 'a <b@example.invalid>',
+        }),
+      ).toContain('EMAIL_FROM');
+      expect(() => loadConfig({ ...resend, RESEND_API_KEY: 're_test_key' })).not.toThrow();
     });
 
     it('rejects wildcard CORS and non-https public URLs', () => {
