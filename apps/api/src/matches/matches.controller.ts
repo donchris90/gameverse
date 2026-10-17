@@ -8,7 +8,7 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
-import { type MatchView, matchIdSchema, moveSchema } from '@gameverse/shared-types';
+import { type MatchView, botMatchSchema, matchIdSchema, moveSchema } from '@gameverse/shared-types';
 import type { z } from 'zod';
 import type { AuthUser } from '../auth/auth.types.js';
 import { CurrentUser } from '../auth/current-user.decorator.js';
@@ -27,6 +27,15 @@ export class MatchesController {
   @Get('current')
   current(@CurrentUser() user: AuthUser): Promise<{ match: MatchView | null }> {
     return this.matches.current(user.id);
+  }
+
+  /** Practice match against a labelled bot. */
+  @Post('bot')
+  startBot(
+    @CurrentUser() user: AuthUser,
+    @Body(new ZodValidationPipe(botMatchSchema)) body: z.output<typeof botMatchSchema>,
+  ): Promise<MatchView> {
+    return this.matches.startBotMatch(user.id, body.gameId, body.level);
   }
 
   @Get(':id')

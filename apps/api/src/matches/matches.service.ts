@@ -2,6 +2,7 @@ import { HttpStatus, Injectable, type OnModuleInit } from '@nestjs/common';
 import {
   DISCONNECT_GRACE_MS,
   ErrorCode,
+  type BotLevelName,
   type GameId,
   type MatchKind,
   type MatchView,
@@ -9,6 +10,7 @@ import {
 } from '@gameverse/shared-types';
 import {
   TURN_TIMER_MS,
+  chooseBotMove,
   createRematch,
   createSeries,
   forfeitSeries,
@@ -21,14 +23,17 @@ import {
   type SeriesState,
 } from '@gameverse/game-rules';
 import type { WebSocket } from 'ws';
+import { randomInt } from 'node:crypto';
 import { AppException } from '../common/app.exception.js';
 import type { BotLevel, Prisma } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { RealtimeHub } from '../realtime/realtime.hub.js';
 import { isBlockedEitherWay } from '../social/relationships.js';
 import { runSerializable, type Tx } from '../social/serializable.js';
+import { botActionId } from './bot-action-id.js';
 import { ActionLimiter } from './action-limiter.js';
 import {
+  BOT_THINK_MS,
   ACTION_LIMIT,
   ACTION_WINDOW_MS,
   NEXT_GAME_DELAY_MS,
@@ -732,5 +737,94 @@ export class MatchesService implements OnModuleInit {
       return { changed: true, change: { patch, events } };
     });
     return ended;
+  }
+  // --------------------------------------------------------------------- bots
+
+  /**
+   * Starts a practice match against a labelled bot. Any search or hosted room the player had is
+   * ended first, because they chose to play now. The human sits in seat 0; who opens is a coin flip.
+   */
+  async startBotMatch(userId: string, gameId: GameId, level: BotLevelName): Promise<MatchView> {
+    this.consumeAction(userId);
+    const matchId = await runSerializable(this.prisma, async (tx) => {
+      const hosting = await tx.gameRoom.count({
+        where: { hostId: userId, status: 'OPEN', expiresAt: { gt: new Date() } },
+      });
+      if (hosting > 0) throw invalidState('Close your open room before starting a bot match');
+      await tx.matchQueueEntry.deleteMany({ where: { userId } });
+      return this.createMatch(
+        {
+          gameId,
+          kind: 'BOT',
+          seats: [{ userId }, { bot: BOT_TO_DB[level] }],
+          openingSeat: randomInt(0, 2) === 0 ? 0 : 1,
+        },
+        tx,
+      );
+    });
+    await this.publish(matchId);
+    return this.get(userId, matchId);
+  }
+
+  /**
+   * Sweeper step: lets every bot whose turn it is, and who has "thought" long enough, move.
+   * Returns how many moves were made.
+   */
+  async runBotMoves(now = new Date()): Promise<number> {
+    const waiting = await this.prisma.gameMatch.findMany({
+      where: { status: 'ACTIVE', players: { some: { userId: null } } },
+      select: { id: true },
+      take: SWEEP_BATCH,
+    });
+    let moved = 0;
+    for (const { id } of waiting) {
+      try {
+        if (await this.botMove(id, now)) moved += 1;
+      } catch {
+        // one failing match must not stop the others; the next sweep retries
+      }
+    }
+    return moved;
+  }
+
+  /**
+   * One bot move. It goes through exactly the validator a human move goes through (`playMove`), is
+   * recorded in the same event log, and carries a deterministic action id so two sweepers racing
+   * for the same turn make one move.
+   */
+  private async botMove(matchId: string, now: Date): Promise<boolean> {
+    let made = false;
+    await this.mutate(matchId, null, (current): Outcome => {
+      made = false; // the decision may run again after a rolled-back attempt
+      if (current.status !== 'ACTIVE' || current.deadlineKind !== 'TURN') return { changed: false };
+      if (current.deadlineAt === null) return { changed: false };
+      const turnStartedAt = current.deadlineAt.getTime() - TURN_TIMER_MS;
+      if (now.getTime() < turnStartedAt + BOT_THINK_MS) return { changed: false };
+      const before = seriesOf(current);
+      if (before === null) return { changed: false };
+      const seat = seatToMove(before);
+      if (seat === null) return { changed: false };
+      const player = current.players.find((candidate) => candidate.seat === seat);
+      if (!player || player.userId !== null || player.botLevel === null) return { changed: false };
+
+      const level = player.botLevel.toLowerCase() as BotLevelName;
+      const cell = chooseBotMove(before.game, level, () => randomInt(0, 2 ** 30) / 2 ** 30);
+      const result = playMove(before, seat, cell);
+      if (!result.ok) return { changed: false }; // a bot may never force an illegal move through
+
+      const events: EventDraft[] = [
+        {
+          type: 'MOVE',
+          seat,
+          clientActionId: botActionId(current.id, current.version),
+          data: { cell },
+        },
+        ...this.gameEndedEvents(before, result.series),
+      ];
+      const patch = this.afterSeriesChange(result.series, events, now);
+      made = true;
+      return { changed: true, change: { patch, events } };
+    });
+    return made;
   }
 }

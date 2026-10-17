@@ -102,4 +102,12 @@ export const moveSchema = z
   .strict();
 export type MoveRequest = z.input<typeof moveSchema>;
 
+export const BOT_LEVELS = ['easy', 'medium', 'hard'] as const;
+
+/** Starts a practice match against a labelled bot. The server picks who opens. */
+export const botMatchSchema = z
+  .object({ gameId: z.enum(GAME_IDS), level: z.enum(BOT_LEVELS) })
+  .strict();
+export type BotMatchRequest = z.input<typeof botMatchSchema>;
+
 export const emptyActionSchema = z.object({}).strict();

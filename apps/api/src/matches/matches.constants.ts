@@ -15,3 +15,8 @@ export const BOT_AVATAR_ID = 'bot';
 /** Match actions (ready, move, leave, rematch) a single player may send in one window. */
 export const ACTION_LIMIT = 30;
 export const ACTION_WINDOW_MS = 10_000;
+
+/** A bot waits this long before answering, so the move does not appear instantly like a script. */
+export const BOT_THINK_MS = 800;
+/** How often bots are given the chance to move. */
+export const BOT_SWEEP_INTERVAL_MS = 250;

@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { Inject } from '@nestjs/common';
 import { APP_CONFIG, type AppConfig } from '../config/config.js';
-import { SWEEP_INTERVAL_MS } from './matches.constants.js';
+import { BOT_SWEEP_INTERVAL_MS, SWEEP_INTERVAL_MS } from './matches.constants.js';
 import { MatchesService } from './matches.service.js';
 
 /**
@@ -19,7 +19,9 @@ import { MatchesService } from './matches.service.js';
 export class MatchTimersService implements OnApplicationBootstrap, OnApplicationShutdown {
   private readonly logger = new Logger(MatchTimersService.name);
   private timer: NodeJS.Timeout | null = null;
+  private botTimer: NodeJS.Timeout | null = null;
   private running = false;
+  private botsRunning = false;
 
   constructor(
     private readonly matches: MatchesService,
@@ -40,10 +42,27 @@ export class MatchTimersService implements OnApplicationBootstrap, OnApplication
         });
     }, SWEEP_INTERVAL_MS);
     this.timer.unref();
+
+    // Bots get their own, faster loop so an answer arrives about when it should.
+    this.botTimer = setInterval(() => {
+      if (this.botsRunning) return;
+      this.botsRunning = true;
+      this.matches
+        .runBotMoves()
+        .catch((error: unknown) => {
+          this.logger.warn(`bot sweep failed: ${String(error)}`);
+        })
+        .finally(() => {
+          this.botsRunning = false;
+        });
+    }, BOT_SWEEP_INTERVAL_MS);
+    this.botTimer.unref();
   }
 
   onApplicationShutdown(): void {
     if (this.timer) clearInterval(this.timer);
+    if (this.botTimer) clearInterval(this.botTimer);
     this.timer = null;
+    this.botTimer = null;
   }
 }

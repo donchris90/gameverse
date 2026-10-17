@@ -205,3 +205,19 @@ Mutation checks (9): each of outer and inner grace check, snapshot send, reconne
 Observed once and not reproduced: in one of four full integration runs, "a deadline that is not yet due is left alone" failed; it passed in the next 8 runs including repeated runs of the match files together. Cause unknown; watch for it in CI.
 
 Limits: sweeping runs every second and only on this instance (in-memory sockets); frame rate limiting on the socket already existed; the grace and limits are constants in shared-types and matches.constants.
+
+### Slice 2E: bots in matches (done, 2026-10-18)
+
+New: `POST /v1/matches/bot`, `MatchesService.startBotMatch` / `runBotMoves` / `botMove`, `botActionId`, `BOT_THINK_MS`, a 250 ms bot sweep in `MatchTimersService`, `botMatchSchema` in shared-types. No schema change. Decisions #59 to #61. The 20 s "play a bot" offer from 2C can now be honoured by the app: it calls this endpoint.
+
+| Command                                                                                  | Result                                                                         |
+| ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| `npx prettier --check .` then `npx turbo run lint typecheck build test --env-mode=loose` | clean; 22/22 tasks (api 127, shared-types 23, design-system 24, game-rules 32) |
+| `pnpm --filter @gameverse/api test:integration`                                          | 18 files, **426/426 passed** (25 new in `matches-bot.e2e-spec.ts`)             |
+| `pnpm --filter @gameverse/api smoke:dist`                                                | compiled API is up and ready                                                   |
+
+What the tests prove (real Postgres and HTTP): the bot is labelled `Bot` with no user behind it and the right level is stored; a bot match starts when the human alone presses ready; bad levels, games and extra fields are refused; starting needs sign-in and a profile, is refused inside a match or with an open room, and ends a running search; the bot does not move before its think time and moves once after; it answers a human move exactly once, then waits; three sweepers at one instant make one move; its move sits in the event log like a human one with a derived id and a gap-free log; a human cannot move for it or out of turn and a stranger cannot see the match; four full series against the hard bot with a random human, where the bot never lost a game, every logged move replays legally through the rules and reproduces the stored score; an easy bot finishes a series; leaving, turn timeout and 30 s absence all lose to the bot; rematch is created at once, labelled, and opened by the seat that did not open the last game; a bot is never marked disconnected; bot-match actions count against the rate limit.
+
+Mutation checks (8): removing the think time, always using the easy level, a constant action id, keeping the queue entry, dropping the open-room check, a wrong match kind and the rolled-back-retry flag reset were caught. The flag reset first **survived**; a deterministic test now forces a rolled-back attempt followed by a retry that finds nothing to do, and catches it. One mutant (dropping the "seat belongs to a bot" user check) is harmless: the bot-level check beside it makes the guard redundant, so it is not tested separately.
+
+Limits: random human moves make the series tests non-deterministic by design, but they assert only invariants; the bot has no difficulty tuning beyond three levels; bot sweeping runs on one instance. Not yet visible to players: the apps do not call any of this until 2G.
