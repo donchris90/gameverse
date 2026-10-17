@@ -10,6 +10,7 @@ import type { AppConfig } from './config/config.js';
 import { ConfigModule } from './config/config.module.js';
 import { HealthModule } from './health/health.module.js';
 import { PrismaModule } from './prisma/prisma.module.js';
+import { ProfilesModule } from './profiles/profiles.module.js';
 import { UsersModule } from './users/users.module.js';
 import { VoiceModule } from './voice/voice.module.js';
 
@@ -61,6 +62,7 @@ export class AppModule {
         ThrottlerModule.forRoot({ throttlers: buildThrottlers(config) }),
         PrismaModule,
         AuthModule,
+        ProfilesModule,
         UsersModule,
         VoiceModule,
         HealthModule,

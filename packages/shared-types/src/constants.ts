@@ -27,3 +27,24 @@ export const USER_STATUSES = [
   'DELETED',
 ] as const;
 export type UserStatus = (typeof USER_STATUSES)[number];
+
+/** Free avatar set shipped with the app. Paid or earned avatars arrive with the shop (post-MVP). */
+export const AVATAR_IDS = Array.from(
+  { length: 12 },
+  (_, index) => `avatar-${String(index + 1).padStart(2, '0')}`,
+) as readonly string[] as readonly [string, ...string[]];
+export type AvatarId = string;
+
+export const USERNAME_PATTERN = /^[A-Za-z][A-Za-z0-9_]{2,19}$/;
+export const BIO_MAX_LENGTH = 160;
+/** Minimum days between username changes (stops evasion of blocks/reports by renaming). */
+export const USERNAME_CHANGE_COOLDOWN_DAYS = 7;
+
+export const PROFILE_VISIBILITIES = ['EVERYONE', 'FRIENDS'] as const;
+export type ProfileVisibility = (typeof PROFILE_VISIBILITIES)[number];
+
+export const ONLINE_STATUS_VISIBILITIES = ['EVERYONE', 'FRIENDS', 'NOBODY'] as const;
+export type OnlineStatusVisibility = (typeof ONLINE_STATUS_VISIBILITIES)[number];
+
+export const DIRECT_MESSAGE_POLICIES = ['EVERYONE', 'FRIENDS', 'NOBODY'] as const;
+export type DirectMessagePolicy = (typeof DIRECT_MESSAGE_POLICIES)[number];

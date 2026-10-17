@@ -59,6 +59,8 @@ model User {
   identities    AuthIdentity[]
   refreshTokens RefreshToken[]
   oneTimeTokens OneTimeToken[]
+  profile       UserProfile?
+  settings      UserSettings?
 
   @@index([status])
   @@map("users")
@@ -117,4 +119,55 @@ model OneTimeToken {
   @@index([userId, type])
   @@index([expiresAt])
   @@map("one_time_tokens")
+}
+
+enum ProfileVisibility {
+  EVERYONE
+  FRIENDS
+}
+
+enum OnlineStatusVisibility {
+  EVERYONE
+  FRIENDS
+  NOBODY
+}
+
+enum DirectMessagePolicy {
+  EVERYONE
+  FRIENDS
+  NOBODY
+}
+
+model UserProfile {
+  userId String @id @db.Uuid
+
+  /// As typed by the user (case preserved for display).
+  username          String
+  /// Lower-cased copy; the uniqueness key.
+  usernameLower     String    @unique
+  avatarId          String
+  bio               String?   @db.VarChar(160)
+  usernameChangedAt DateTime? @db.Timestamptz(3)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_profiles")
+}
+
+/// Privacy defaults are conservative: everything friends-only (product spec section 6).
+model UserSettings {
+  userId String @id @db.Uuid
+
+  profileVisibility      ProfileVisibility      @default(FRIENDS)
+  onlineStatusVisibility OnlineStatusVisibility @default(FRIENDS)
+  dmPolicy               DirectMessagePolicy    @default(FRIENDS)
+
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_settings")
 }
