@@ -1,3 +1,4 @@
+import type { MatchView } from './matches.js';
 import { z } from 'zod';
 import { MESSAGE_MAX_LENGTH, PAGE_SIZE_MAX } from './constants.js';
 import type { Page, UserCard } from './social.js';
@@ -51,4 +52,5 @@ export type RealtimeEvent =
   | { type: 'message.new'; conversationId: string; message: MessageView }
   | { type: 'message.read'; conversationId: string; userId: string; lastReadMessageId: string }
   | { type: 'presence.update'; userId: string; online: boolean }
+  | { type: 'match.update'; match: MatchView }
   | { type: 'error'; code: string };

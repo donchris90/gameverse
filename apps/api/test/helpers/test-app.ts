@@ -61,6 +61,9 @@ export async function createTestApp(
 
 /** Removes every account (and, by cascade, tokens and identities). */
 export async function resetDatabase(prisma: PrismaService): Promise<void> {
+  // Matches reference users only loosely (bot seats have no user), so clear them explicitly.
+  await prisma.gameMatch.updateMany({ data: { rematchMatchId: null } });
+  await prisma.gameMatch.deleteMany();
   await prisma.user.deleteMany();
   // audit_logs is append-only (a trigger rejects DELETE) and has no foreign keys; TRUNCATE is the
   // one way to clear it, and it is only ever run against the *_test database.

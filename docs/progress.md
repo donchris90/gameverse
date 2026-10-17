@@ -149,3 +149,21 @@ Exhaustive checks inside the tests: every one of the 255,168 possible games is p
 Mutation checks: five deliberate bugs (no draw detection, opener not alternating, timeouts not cleared by a move, hard bot picking the worst move, timeout awarding the game to the loser) were each caught (5/5), then reverted and the suite re-run green.
 
 Not done yet: everything server-side (2B onward). Nothing in 2A is wired into the API or the apps.
+
+### Slice 2B: match tables and session service (done, 2026-10-18)
+
+New: migration `20261018000000_matches` (hand-written SQL like the others; **`prisma migrate deploy` on it and the CI drift check are unverified**), models Game, GameMatch, GameMatchPlayer, GameEvent; `apps/api/src/matches/` (service, controller, timers, view); `packages/shared-types/src/matches.ts`; `match.update` WebSocket event.
+
+Endpoints (all need a token; non-members get 404): `GET /v1/matches/current`, `GET /v1/matches/:id`, `POST /v1/matches/:id/ready`, `/moves`, `/leave`, `/rematch`. There is **no REST way to create a match yet**: matches are created through `MatchesService.createMatch`, which 2C (queue, private rooms, invites) and 2E (bot games) will call. Bot moves are not played yet (2E).
+
+| Command                                                                                  | Result                                                                         |
+| ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| `npx prettier --check .` then `npx turbo run lint typecheck build test --env-mode=loose` | clean; 22/22 tasks (api 104, shared-types 23, design-system 24, game-rules 32) |
+| `pnpm --filter @gameverse/api test:integration`                                          | 15 files, **331/331 passed** (55 new in `matches.e2e-spec.ts`)                 |
+| `pnpm --filter @gameverse/api smoke:dist`                                                | compiled API is up and ready                                                   |
+
+What the new tests prove (real Postgres, real HTTP, real WebSocket): non-members and unknown ids get the same 404; ready is idempotent and two simultaneous readies start the game once; a move needs the current version and a fresh action id; a retried move and five identical simultaneous moves apply once; two different moves racing for one turn land exactly one; unknown body fields (a "winner", a "mark") are refused; out-of-turn and occupied-cell moves change nothing; a full best-of-three with a gap-free event log whose last number equals the version; drawn games; turn timeout, two-timeouts forfeit and the reset by a real move; ready window expiry; an overdue deadline is resolved once even with three sweepers at the same instant; leave before and during a match, and twice; rematch needs both, makes one match even when both ask at once, and alternates the opener; a player cannot be in two open matches, even when two creations race; blocked players are not matched; bot seats are labelled and have no user; each change is pushed to both players with their own seat and to no one else.
+
+Mutation checks (9): removing the move idempotency check, the stale-version check, the already-in-match check, membership enforcement, the due-date check, the ready idempotency, `.strict()` on the move body, the rematch idempotency and the opener alternation were each caught. Two (rematch idempotency, opener alternation) first **survived**; tests were added and both are now caught. All originals restored and the suite re-run green.
+
+Notes and limits: the in-process sweeper (1 s) is off under `NODE_ENV=test`; tests call `runDueTimers()` directly. Per-user action rate limiting and disconnect grace/reconnect are slice 2D. Deploy note: the API now depends on `@gameverse/game-rules`, so the Render build command must build it too (see below).

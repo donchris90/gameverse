@@ -83,6 +83,8 @@ model User {
 
   deviceTokens DeviceToken[]
 
+  gameSeats GameMatchPlayer[]
+
   @@index([status])
   @@map("users")
 }
@@ -412,4 +414,131 @@ model DeviceToken {
 
   @@index([userId])
   @@map("device_tokens")
+}
+
+// ---------------------------------------------------------------------------
+// Phase 2: games and matches
+// ---------------------------------------------------------------------------
+
+enum MatchStatus {
+  WAITING
+  READY
+  ACTIVE
+  COMPLETED
+  CANCELLED
+  EXPIRED
+  ABANDONED
+}
+
+enum MatchKind {
+  QUICK
+  PRIVATE
+  FRIEND
+  BOT
+}
+
+enum MatchDeadlineKind {
+  READY
+  TURN
+  NEXT_GAME
+}
+
+enum BotLevel {
+  EASY
+  MEDIUM
+  HARD
+}
+
+/// Catalogue of games the server can host. Only enabled games can be started.
+model Game {
+  id         String  @id
+  name       String
+  enabled    Boolean @default(true)
+  minPlayers Int     @db.SmallInt
+  maxPlayers Int     @db.SmallInt
+
+  matches GameMatch[]
+
+  @@map("games")
+}
+
+/// One match (a best-of-three series for tic-tac-toe). The server owns every field; clients only
+/// ever send intentions (ready, move, leave, rematch).
+model GameMatch {
+  id     String      @id @default(uuid(7)) @db.Uuid
+  gameId String
+  kind   MatchKind
+  status MatchStatus
+
+  /// Increases by the number of events appended by each change. Clients send the version they saw
+  /// with every move, so a move made on stale information is refused.
+  version Int @default(0)
+
+  /// Serialised game-rules series state. Null until the match is active.
+  state Json?
+
+  /// What the server is waiting for next and by when. The sweeper acts on overdue deadlines, so a
+  /// restart cannot leave a match stuck.
+  deadlineKind MatchDeadlineKind?
+  deadlineAt   DateTime?         @db.Timestamptz(3)
+
+  /// score | forfeit | left | expired | cancelled. Null while the match is open.
+  endReason  String?
+  /// Winning seat; null for a drawn series or a match that never produced a result.
+  winnerSeat Int?    @db.SmallInt
+
+  /// Which seat opens game 1 (alternates from one rematch to the next).
+  openingSeat          Int @default(0) @db.SmallInt
+  /// Bit 1 = seat 0 asked for a rematch, bit 2 = seat 1 did.
+  rematchRequestedMask Int @default(0) @db.SmallInt
+  rematchMatchId       String? @unique @db.Uuid
+
+  createdAt DateTime  @default(now()) @db.Timestamptz(3)
+  startedAt DateTime? @db.Timestamptz(3)
+  endedAt   DateTime? @db.Timestamptz(3)
+
+  game          Game              @relation(fields: [gameId], references: [id])
+  players       GameMatchPlayer[]
+  events        GameEvent[]
+  rematchMatch  GameMatch?        @relation("Rematch", fields: [rematchMatchId], references: [id], onDelete: SetNull)
+  rematchSource GameMatch?        @relation("Rematch")
+
+  @@index([status, deadlineAt])
+  @@map("game_matches")
+}
+
+/// A seat in a match: a human (userId) or a labelled bot (botLevel).
+model GameMatchPlayer {
+  matchId  String    @db.Uuid
+  seat     Int       @db.SmallInt
+  userId   String?   @db.Uuid
+  botLevel BotLevel?
+  ready    Boolean   @default(false)
+
+  match GameMatch @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  user  User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([matchId, seat])
+  @@index([userId])
+  @@map("game_match_players")
+}
+
+/// Append-only log of everything that happened in a match, in order.
+model GameEvent {
+  id             String   @id @default(uuid(7)) @db.Uuid
+  matchId        String   @db.Uuid
+  /// 1, 2, 3 ... with no gaps; the match version equals the last seq.
+  seq            Int
+  type           String
+  seat           Int?     @db.SmallInt
+  /// Client idempotency key for moves; a retry with the same key is recognised and ignored.
+  clientActionId String?  @db.Uuid
+  data           Json?
+  createdAt      DateTime @default(now()) @db.Timestamptz(3)
+
+  match GameMatch @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  @@unique([matchId, seq])
+  @@unique([matchId, seat, clientActionId])
+  @@map("game_events")
 }

@@ -57,6 +57,9 @@ importers:
 
   apps/api:
     dependencies:
+      '@gameverse/game-rules':
+        specifier: workspace:*
+        version: link:../../packages/game-rules
       '@gameverse/shared-types':
         specifier: workspace:*
         version: link:../../packages/shared-types
