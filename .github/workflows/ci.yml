@@ -41,6 +41,8 @@ jobs:
       - name: Create integration-test database
         run: PGPASSWORD=ci_only_password psql -h localhost -U gameverse -d gameverse_ci -c 'CREATE DATABASE gameverse_ci_test;' -c 'CREATE DATABASE gameverse_ci_shadow;'
       - run: pnpm test:integration
+      - name: Compiled API boots under plain Node
+        run: pnpm --filter @gameverse/api smoke:dist
       - name: Migration applies to an empty database
         run: pnpm --filter @gameverse/api db:migrate:deploy
       - name: Migration drift check (schema.prisma vs migrations)

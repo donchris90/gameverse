@@ -1,6 +1,9 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { RtcRole, RtcTokenBuilder } from 'agora-token';
+import agoraToken from 'agora-token';
 import { APP_CONFIG, type AppConfig } from '../config/config.js';
+
+// agora-token is CommonJS: named imports work under Vitest but fail in the compiled app under Node.
+const { RtcRole, RtcTokenBuilder } = agoraToken;
 
 export interface VoiceTokenRequest {
   channel: string;

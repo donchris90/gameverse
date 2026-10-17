@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "@gameverse/design-system": "workspace:*",
-    "@refinedev/core": "^5.0.12",
+    "@gameverse/shared-types": "workspace:*",
     "react": "^19.3.1",
     "react-dom": "19.3.1",
     "react-router": "^7.18.4"

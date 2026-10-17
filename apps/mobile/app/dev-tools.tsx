@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { checkApiReady, type ReadyResult } from '../src/api';
 
-export default function Home() {
+export default function DevTools() {
   const [ready, setReady] = useState<ReadyResult | null>(null);
 
   useEffect(() => {
@@ -24,7 +24,7 @@ export default function Home() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>GameVerse</Text>
+      <Text style={styles.title}>Developer tools</Text>
       <Text accessibilityRole="text" style={styles.status}>
         {status}
       </Text>
