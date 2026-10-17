@@ -49,12 +49,12 @@ model User {
   termsVersion    String
   termsAcceptedAt DateTime @db.Timestamptz(3)
 
-  emailVerifiedAt DateTime? @db.Timestamptz(3)
+  emailVerifiedAt DateTime?  @db.Timestamptz(3)
   role            UserRole   @default(USER)
   status          UserStatus @default(ACTIVE)
-  lastLoginAt     DateTime? @db.Timestamptz(3)
+  lastLoginAt     DateTime?  @db.Timestamptz(3)
   /// Set when the account is deleted; the row stays as an anonymised tombstone (see AccountService).
-  deletedAt       DateTime? @db.Timestamptz(3)
+  deletedAt       DateTime?  @db.Timestamptz(3)
 
   createdAt DateTime @default(now()) @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @db.Timestamptz(3)
@@ -77,13 +77,16 @@ model User {
   conversationMembers ConversationMember[]
   messagesSent        Message[]
 
-  reportsMade    ModerationReport[] @relation("ReportReporter")
-  reportsAgainst ModerationReport[] @relation("ReportReported")
+  reportsMade              ModerationReport[] @relation("ReportReporter")
+  reportsAgainst           ModerationReport[] @relation("ReportReported")
   moderationActionsAgainst ModerationAction[]
 
   deviceTokens DeviceToken[]
 
-  gameSeats GameMatchPlayer[]
+  gameSeats   GameMatchPlayer[]
+  hostedRooms GameRoom[]        @relation("RoomHost")
+  roomInvites GameRoom[]        @relation("RoomInvitee")
+  queueEntry  MatchQueueEntry?  @relation("QueueUser")
 
   @@index([status])
   @@map("users")
@@ -106,18 +109,18 @@ model AuthIdentity {
 }
 
 model RefreshToken {
-  id         String    @id @default(uuid(7)) @db.Uuid
-  userId     String    @db.Uuid
+  id           String    @id @default(uuid(7)) @db.Uuid
+  userId       String    @db.Uuid
   /// All tokens descended from one login share a family; reuse of a rotated token revokes the family.
-  familyId   String    @db.Uuid
+  familyId     String    @db.Uuid
   /// SHA-256 (hex) of the opaque token. The raw token is never stored.
-  tokenHash  String    @unique
-  expiresAt  DateTime  @db.Timestamptz(3)
-  revokedAt  DateTime? @db.Timestamptz(3)
-  replacedById String?  @db.Uuid
-  userAgent  String?
-  ipAddress  String?
-  createdAt  DateTime  @default(now()) @db.Timestamptz(3)
+  tokenHash    String    @unique
+  expiresAt    DateTime  @db.Timestamptz(3)
+  revokedAt    DateTime? @db.Timestamptz(3)
+  replacedById String?   @db.Uuid
+  userAgent    String?
+  ipAddress    String?
+  createdAt    DateTime  @default(now()) @db.Timestamptz(3)
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -480,7 +483,7 @@ model GameMatch {
   /// What the server is waiting for next and by when. The sweeper acts on overdue deadlines, so a
   /// restart cannot leave a match stuck.
   deadlineKind MatchDeadlineKind?
-  deadlineAt   DateTime?         @db.Timestamptz(3)
+  deadlineAt   DateTime?          @db.Timestamptz(3)
 
   /// score | forfeit | left | expired | cancelled. Null while the match is open.
   endReason  String?
@@ -488,9 +491,9 @@ model GameMatch {
   winnerSeat Int?    @db.SmallInt
 
   /// Which seat opens game 1 (alternates from one rematch to the next).
-  openingSeat          Int @default(0) @db.SmallInt
+  openingSeat          Int     @default(0) @db.SmallInt
   /// Bit 1 = seat 0 asked for a rematch, bit 2 = seat 1 did.
-  rematchRequestedMask Int @default(0) @db.SmallInt
+  rematchRequestedMask Int     @default(0) @db.SmallInt
   rematchMatchId       String? @unique @db.Uuid
 
   createdAt DateTime  @default(now()) @db.Timestamptz(3)
@@ -541,4 +544,53 @@ model GameEvent {
   @@unique([matchId, seq])
   @@unique([matchId, seat, clientActionId])
   @@map("game_events")
+}
+
+enum RoomStatus {
+  OPEN
+  STARTED
+  CLOSED
+  DECLINED
+  EXPIRED
+}
+
+/// A private room (join by code) or a friend invite (the same room, restricted to one invitee).
+/// At most one OPEN room per host; the service enforces it in a serializable transaction.
+model GameRoom {
+  id            String     @id @default(uuid(7)) @db.Uuid
+  /// Six characters from an alphabet without look-alikes (no 0/O/1/I). Unique among all rooms.
+  code          String     @unique
+  gameId        String
+  hostId        String     @db.Uuid
+  /// Set for a friend invite: only this user can join.
+  invitedUserId String?    @db.Uuid
+  status        RoomStatus @default(OPEN)
+  expiresAt     DateTime   @db.Timestamptz(3)
+  matchId       String?    @unique @db.Uuid
+  createdAt     DateTime   @default(now()) @db.Timestamptz(3)
+  respondedAt   DateTime?  @db.Timestamptz(3)
+
+  host        User  @relation("RoomHost", fields: [hostId], references: [id], onDelete: Cascade)
+  invitedUser User? @relation("RoomInvitee", fields: [invitedUserId], references: [id], onDelete: Cascade)
+
+  @@index([hostId, status])
+  @@index([invitedUserId, status])
+  @@index([status, expiresAt])
+  @@map("game_rooms")
+}
+
+/// A player waiting for a quick match. One row per user (unique), deleted when matched, cancelled
+/// or expired, so "has a row" means "is searching".
+model MatchQueueEntry {
+  id       String   @id @default(uuid(7)) @db.Uuid
+  userId   String   @unique @db.Uuid
+  gameId   String
+  /// Skill rating captured when the search started (1000 until ratings exist in slice 2F).
+  rating   Int
+  joinedAt DateTime @default(now()) @db.Timestamptz(3)
+
+  user User @relation("QueueUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([gameId, joinedAt])
+  @@map("match_queue_entries")
 }

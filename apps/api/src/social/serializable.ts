@@ -12,7 +12,7 @@ function isRetryable(error: unknown): boolean {
   return (
     code === 'P2034' || // write conflict / serialization failure / deadlock
     code === 'P2002' || // lost an insert race; the retry will see the winner's row
-    /could not serialize|serialization|deadlock|40001|40P01/i.test(message)
+    /could not serialize|serialization|deadlock|TransactionWriteConflict|40001|40P01/i.test(message)
   );
 }
 

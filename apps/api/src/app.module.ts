@@ -20,6 +20,7 @@ import { ModerationModule } from './moderation/moderation.module.js';
 import { UsersModule } from './users/users.module.js';
 import { VoiceModule } from './voice/voice.module.js';
 import { MatchesModule } from './matches/matches.module.js';
+import { LobbyModule } from './lobby/lobby.module.js';
 
 const REQUEST_ID_PATTERN = /^[\w-]{8,64}$/;
 
@@ -79,6 +80,7 @@ export class AppModule {
         UsersModule,
         VoiceModule,
         MatchesModule,
+        LobbyModule,
         HealthModule,
       ],
       providers: [

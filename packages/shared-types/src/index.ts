@@ -8,3 +8,4 @@ export * from './moderation.js';
 export * from './profile.js';
 export * from './social.js';
 export * from './matches.js';
+export * from './lobby.js';

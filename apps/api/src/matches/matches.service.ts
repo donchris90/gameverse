@@ -158,7 +158,7 @@ export class MatchesService {
   // --------------------------------------------------------------- publishing
 
   /** Pushes the new state to every human seat. Best effort: the REST response is the truth. */
-  private async publish(matchId: string): Promise<void> {
+  async publish(matchId: string): Promise<void> {
     try {
       const match = await this.load(this.prisma, matchId);
       if (!match) return;
