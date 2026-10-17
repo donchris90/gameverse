@@ -1,0 +1,109 @@
+import { z } from 'zod';
+
+/** DI token for the validated application configuration. */
+export const APP_CONFIG = Symbol('APP_CONFIG');
+
+const csv = z
+  .string()
+  .default('')
+  .transform((value) =>
+    value
+      .split(',')
+      .map((item) => item.trim())
+      .filter((item) => item.length > 0),
+  );
+
+const booleanString = z
+  .enum(['true', 'false'])
+  .default('false')
+  .transform((value) => value === 'true');
+
+const PLACEHOLDER_SECRET = /replace_with|change[-_]?me|placeholder|example|secret_here/i;
+
+const envSchema = z
+  .object({
+    NODE_ENV: z.enum(['development', 'test', 'staging', 'production']).default('development'),
+    PORT: z.coerce.number().int().min(1).max(65535).default(3000),
+    LOG_LEVEL: z
+      .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
+      .default('info'),
+    TRUST_PROXY: booleanString,
+
+    DATABASE_URL: z.string().min(1, 'is required'),
+
+    JWT_ACCESS_SECRET: z.string().min(32, 'must be at least 32 characters'),
+    ACCESS_TOKEN_TTL_SECONDS: z.coerce.number().int().min(60).max(3600).default(900),
+    REFRESH_TOKEN_TTL_DAYS: z.coerce.number().int().min(1).max(90).default(30),
+
+    GOOGLE_CLIENT_IDS: csv,
+    APPLE_CLIENT_IDS: csv,
+
+    PUBLIC_WEB_URL: z.url().default('http://localhost:3000'),
+    CORS_ORIGINS: csv,
+
+    EMAIL_PROVIDER: z.enum(['console', 'memory']).default('console'),
+    EMAIL_FROM: z.string().min(3).default('GameVerse <no-reply@example.invalid>'),
+
+    RATE_LIMIT_DEFAULT_PER_MIN: z.coerce.number().int().min(1).max(100_000).default(120),
+    RATE_LIMIT_AUTH_PER_MIN: z.coerce.number().int().min(1).max(10_000).default(10),
+  })
+  .superRefine((config, ctx) => {
+    if (PLACEHOLDER_SECRET.test(config.JWT_ACCESS_SECRET)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['JWT_ACCESS_SECRET'],
+        message: 'looks like a placeholder; generate a real random secret',
+      });
+    }
+
+    const deployed = config.NODE_ENV === 'staging' || config.NODE_ENV === 'production';
+    if (deployed) {
+      // Both available providers ("console", "memory") are development-only stubs. Until a real
+      // provider is integrated, staging/production must refuse to start rather than silently
+      // drop or print verification and password-reset emails.
+      ctx.addIssue({
+        code: 'custom',
+        path: ['EMAIL_PROVIDER'],
+        message:
+          'no production email provider is integrated yet; development providers are not allowed in staging/production',
+      });
+      if (config.CORS_ORIGINS.includes('*')) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['CORS_ORIGINS'],
+          message: 'wildcard origins are not allowed in staging/production',
+        });
+      }
+      if (!config.PUBLIC_WEB_URL.startsWith('https://')) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['PUBLIC_WEB_URL'],
+          message: 'must use https in staging/production',
+        });
+      }
+    }
+  });
+
+export type AppConfig = z.output<typeof envSchema>;
+
+export class ConfigError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ConfigError';
+  }
+}
+
+/**
+ * Validates environment variables. Error messages name the offending variables but never echo
+ * their values, so secrets cannot leak into logs.
+ */
+export function loadConfig(env: Record<string, string | undefined>): AppConfig {
+  const result = envSchema.safeParse(env);
+  if (!result.success) {
+    const problems = result.error.issues
+      .map((issue) => `${issue.path.join('.') || '(root)'}: ${issue.message}`)
+      .join('; ');
+    throw new ConfigError(`Invalid environment configuration - ${problems}`);
+  }
+  return result.data;
+}

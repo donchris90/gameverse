@@ -1,0 +1,48 @@
+/**
+ * Stable machine-readable error codes returned by the API.
+ * Clients branch on `code`, never on the human-readable `message`.
+ */
+export const ErrorCode = {
+  // generic
+  VALIDATION_FAILED: 'VALIDATION_FAILED',
+  UNAUTHENTICATED: 'UNAUTHENTICATED',
+  FORBIDDEN: 'FORBIDDEN',
+  NOT_FOUND: 'NOT_FOUND',
+  CONFLICT: 'CONFLICT',
+  RATE_LIMITED: 'RATE_LIMITED',
+  INTERNAL_ERROR: 'INTERNAL_ERROR',
+  SERVICE_UNAVAILABLE: 'SERVICE_UNAVAILABLE',
+
+  // auth
+  INVALID_CREDENTIALS: 'INVALID_CREDENTIALS',
+  TOKEN_INVALID: 'TOKEN_INVALID',
+  TOKEN_EXPIRED: 'TOKEN_EXPIRED',
+  REFRESH_TOKEN_INVALID: 'REFRESH_TOKEN_INVALID',
+  EMAIL_TAKEN: 'EMAIL_TAKEN',
+  UNDER_MINIMUM_AGE: 'UNDER_MINIMUM_AGE',
+  TERMS_NOT_ACCEPTED: 'TERMS_NOT_ACCEPTED',
+  ACCOUNT_SUSPENDED: 'ACCOUNT_SUSPENDED',
+  ACCOUNT_BANNED: 'ACCOUNT_BANNED',
+  ACCOUNT_UNAVAILABLE: 'ACCOUNT_UNAVAILABLE',
+  EMAIL_NOT_VERIFIED: 'EMAIL_NOT_VERIFIED',
+  VERIFICATION_TOO_SOON: 'VERIFICATION_TOO_SOON',
+  ONE_TIME_TOKEN_INVALID: 'ONE_TIME_TOKEN_INVALID',
+
+  // social sign-in
+  SOCIAL_PROVIDER_NOT_CONFIGURED: 'SOCIAL_PROVIDER_NOT_CONFIGURED',
+  SOCIAL_TOKEN_INVALID: 'SOCIAL_TOKEN_INVALID',
+  SOCIAL_EMAIL_NOT_VERIFIED: 'SOCIAL_EMAIL_NOT_VERIFIED',
+  REGISTRATION_DETAILS_REQUIRED: 'REGISTRATION_DETAILS_REQUIRED',
+} as const;
+
+export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode];
+
+export interface ApiErrorBody {
+  error: {
+    code: ErrorCode;
+    message: string;
+    /** Field-level validation issues or other structured detail. Never contains secrets. */
+    details?: unknown;
+  };
+  requestId?: string;
+}

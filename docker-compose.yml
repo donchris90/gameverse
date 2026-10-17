@@ -1,0 +1,24 @@
+# Local development services. Development credentials only - never reuse these anywhere else.
+# Usage: docker compose up -d postgres
+services:
+  postgres:
+    image: postgres:16
+    container_name: gameverse-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: gameverse
+      POSTGRES_PASSWORD: gameverse_dev_pw
+      POSTGRES_DB: gameverse_dev
+    ports:
+      - '5432:5432'
+    volumes:
+      - gameverse_pg_data:/var/lib/postgresql/data
+      - ./infrastructure/docker/init-test-db.sql:/docker-entrypoint-initdb.d/init-test-db.sql:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U gameverse -d gameverse_dev']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  gameverse_pg_data:

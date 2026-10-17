@@ -1,0 +1,12 @@
+packages:
+  - 'apps/*'
+  - 'packages/*'
+
+# pnpm 10 blocks dependency install scripts unless explicitly allowed.
+# Only packages that genuinely need a native build / engine download are listed.
+onlyBuiltDependencies:
+  - argon2
+  - prisma
+  - '@prisma/client'
+  - '@prisma/engines'
+  - esbuild

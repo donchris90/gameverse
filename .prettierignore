@@ -1,0 +1,8 @@
+node_modules
+dist
+coverage
+.turbo
+pnpm-lock.yaml
+apps/api/src/generated
+apps/api/prisma/migrations
+docs/master-build-spec-original.md

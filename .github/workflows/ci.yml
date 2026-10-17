@@ -1,0 +1,51 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: gameverse
+          POSTGRES_PASSWORD: ci_only_password
+          POSTGRES_DB: gameverse_ci
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U gameverse" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://gameverse:ci_only_password@localhost:5432/gameverse_ci
+      TEST_DATABASE_URL: postgresql://gameverse:ci_only_password@localhost:5432/gameverse_ci_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm format:check
+      - run: pnpm --filter @gameverse/api generate
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
+      - name: Create integration-test database
+        run: PGPASSWORD=ci_only_password psql -h localhost -U gameverse -d gameverse_ci -c 'CREATE DATABASE gameverse_ci_test;' -c 'CREATE DATABASE gameverse_ci_shadow;'
+      - run: pnpm test:integration
+      - name: Migration applies to an empty database
+        run: pnpm --filter @gameverse/api db:migrate:deploy
+      - name: Migration drift check (schema.prisma vs migrations)
+        working-directory: apps/api
+        run: >-
+          npx prisma migrate diff --from-migrations prisma/migrations
+          --to-schema prisma/schema.prisma --exit-code
+          --shadow-database-url postgresql://gameverse:ci_only_password@localhost:5432/gameverse_ci_shadow

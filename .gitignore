@@ -1,0 +1,31 @@
+# dependencies
+node_modules/
+.pnpm-store/
+
+# build output
+dist/
+build/
+.turbo/
+*.tsbuildinfo
+coverage/
+
+# generated
+apps/api/src/generated/
+
+# environment - NEVER commit real values
+.env
+.env.*
+!.env.example
+
+# logs / OS / editor
+*.log
+npm-debug.log*
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# expo / mobile (when added)
+.expo/
+apps/mobile/ios/
+apps/mobile/android/

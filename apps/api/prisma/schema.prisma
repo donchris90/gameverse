@@ -1,0 +1,120 @@
+// GameVerse database schema.
+// Phase 0 scope: accounts, social identities, refresh tokens, one-time tokens.
+// Later phases add their own models via new migrations - never edit applied migrations.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  USER
+  MODERATOR
+  ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  BANNED
+  PENDING_DELETION
+  DELETED
+}
+
+enum AuthProvider {
+  GOOGLE
+  APPLE
+}
+
+enum OneTimeTokenType {
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
+}
+
+model User {
+  id String @id @default(uuid(7)) @db.Uuid
+
+  /// Lower-cased, trimmed. Unique.
+  email        String  @unique
+  /// Null for accounts that only use social sign-in.
+  passwordHash String?
+
+  /// Calendar date of birth. Used only for the age gate; never exposed by any API.
+  dateOfBirth     DateTime @db.Date
+  termsVersion    String
+  termsAcceptedAt DateTime @db.Timestamptz(3)
+
+  emailVerifiedAt DateTime? @db.Timestamptz(3)
+  role            UserRole   @default(USER)
+  status          UserStatus @default(ACTIVE)
+  lastLoginAt     DateTime? @db.Timestamptz(3)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  identities    AuthIdentity[]
+  refreshTokens RefreshToken[]
+  oneTimeTokens OneTimeToken[]
+
+  @@index([status])
+  @@map("users")
+}
+
+model AuthIdentity {
+  id             String       @id @default(uuid(7)) @db.Uuid
+  userId         String       @db.Uuid
+  provider       AuthProvider
+  /// The provider's stable subject identifier (`sub`).
+  providerUserId String
+  email          String?
+  createdAt      DateTime     @default(now()) @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerUserId])
+  @@index([userId])
+  @@map("auth_identities")
+}
+
+model RefreshToken {
+  id         String    @id @default(uuid(7)) @db.Uuid
+  userId     String    @db.Uuid
+  /// All tokens descended from one login share a family; reuse of a rotated token revokes the family.
+  familyId   String    @db.Uuid
+  /// SHA-256 (hex) of the opaque token. The raw token is never stored.
+  tokenHash  String    @unique
+  expiresAt  DateTime  @db.Timestamptz(3)
+  revokedAt  DateTime? @db.Timestamptz(3)
+  replacedById String?  @db.Uuid
+  userAgent  String?
+  ipAddress  String?
+  createdAt  DateTime  @default(now()) @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([familyId])
+  @@index([expiresAt])
+  @@map("refresh_tokens")
+}
+
+model OneTimeToken {
+  id        String           @id @default(uuid(7)) @db.Uuid
+  userId    String           @db.Uuid
+  type      OneTimeTokenType
+  /// SHA-256 (hex) of the opaque token. The raw token is only ever sent by email.
+  tokenHash String           @unique
+  expiresAt DateTime         @db.Timestamptz(3)
+  usedAt    DateTime?        @db.Timestamptz(3)
+  createdAt DateTime         @default(now()) @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, type])
+  @@index([expiresAt])
+  @@map("one_time_tokens")
+}

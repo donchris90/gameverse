@@ -1,0 +1,23 @@
+{
+  "name": "gameverse",
+  "private": true,
+  "description": "GameVerse - social multiplayer gaming platform (monorepo)",
+  "packageManager": "pnpm@10.28.0",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "typecheck": "turbo run typecheck",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "test:integration": "turbo run test:integration",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "devDependencies": {
+    "prettier": "^3.4.2",
+    "turbo": "2.11.9",
+    "typescript": "^6.0.2"
+  }
+}
