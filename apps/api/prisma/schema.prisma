@@ -62,6 +62,13 @@ model User {
   profile       UserProfile?
   settings      UserSettings?
 
+  sentFriendRequests     FriendRequest[] @relation("FriendRequestSender")
+  receivedFriendRequests FriendRequest[] @relation("FriendRequestReceiver")
+  friendshipsAsLow       Friendship[]    @relation("FriendshipLow")
+  friendshipsAsHigh      Friendship[]    @relation("FriendshipHigh")
+  blocksMade             BlockedUser[]   @relation("BlockBlocker")
+  blocksReceived         BlockedUser[]   @relation("BlockBlocked")
+
   @@index([status])
   @@map("users")
 }
@@ -170,4 +177,60 @@ model UserSettings {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("user_settings")
+}
+
+enum FriendRequestStatus {
+  PENDING
+  REJECTED
+}
+
+/// At most one row per pair of users (either direction), enforced by the unique key on the ordered
+/// pair. A REJECTED row is kept for the cooldown so the sender cannot spam; the sender is never told.
+model FriendRequest {
+  id          String              @id @default(uuid(7)) @db.Uuid
+  senderId    String              @db.Uuid
+  receiverId  String              @db.Uuid
+  /// The pair of user ids in sorted order (low < high), so A->B and B->A collide on one key.
+  userLowId   String              @db.Uuid
+  userHighId  String              @db.Uuid
+  status      FriendRequestStatus @default(PENDING)
+  createdAt   DateTime            @default(now()) @db.Timestamptz(3)
+  respondedAt DateTime?           @db.Timestamptz(3)
+
+  sender   User @relation("FriendRequestSender", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver User @relation("FriendRequestReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@unique([userLowId, userHighId])
+  @@index([receiverId, status])
+  @@index([senderId, status])
+  @@map("friend_requests")
+}
+
+/// One row per friendship, stored once with the ids sorted (low < high; CHECK in the migration).
+model Friendship {
+  id         String   @id @default(uuid(7)) @db.Uuid
+  userLowId  String   @db.Uuid
+  userHighId String   @db.Uuid
+  createdAt  DateTime @default(now()) @db.Timestamptz(3)
+
+  userLow  User @relation("FriendshipLow", fields: [userLowId], references: [id], onDelete: Cascade)
+  userHigh User @relation("FriendshipHigh", fields: [userHighId], references: [id], onDelete: Cascade)
+
+  @@unique([userLowId, userHighId])
+  @@index([userHighId])
+  @@map("friendships")
+}
+
+model BlockedUser {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  blockerId String   @db.Uuid
+  blockedId String   @db.Uuid
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  blocker User @relation("BlockBlocker", fields: [blockerId], references: [id], onDelete: Cascade)
+  blocked User @relation("BlockBlocked", fields: [blockedId], references: [id], onDelete: Cascade)
+
+  @@unique([blockerId, blockedId])
+  @@index([blockedId])
+  @@map("blocked_users")
 }

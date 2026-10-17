@@ -48,3 +48,10 @@ export type OnlineStatusVisibility = (typeof ONLINE_STATUS_VISIBILITIES)[number]
 
 export const DIRECT_MESSAGE_POLICIES = ['EVERYONE', 'FRIENDS', 'NOBODY'] as const;
 export type DirectMessagePolicy = (typeof DIRECT_MESSAGE_POLICIES)[number];
+
+export const MAX_FRIENDS = 500;
+export const MAX_PENDING_OUTGOING_REQUESTS = 100;
+/** After a rejection, the sender cannot re-send for this long (silently ignored). */
+export const FRIEND_REQUEST_REJECTION_COOLDOWN_DAYS = 30;
+export const USER_SEARCH_MIN_LENGTH = 2;
+export const PAGE_SIZE_MAX = 100;

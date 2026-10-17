@@ -67,3 +67,39 @@ export function tokenFromLastEmail(t: TestApp, to: string): string {
 export function bearer(session: AuthSession): { Authorization: string } {
   return { Authorization: `Bearer ${session.accessToken}` };
 }
+
+export interface SocialUser extends RegisteredUser {
+  id: string;
+  username: string;
+  token: string;
+  auth: { Authorization: string };
+}
+
+let usernameCounter = 0;
+/** Registers an account and completes onboarding so it can use friends, chat and search. */
+export async function registerWithProfile(
+  t: TestApp,
+  username?: string,
+  overrides: Partial<{ avatarId: string; bio: string }> = {},
+): Promise<SocialUser> {
+  usernameCounter += 1;
+  const name = username ?? `Player${String(usernameCounter)}x${Date.now().toString(36).slice(-4)}`;
+  const user = await registerUser(t);
+  const token = user.session.accessToken;
+  await request(t.server)
+    .put('/v1/me/profile')
+    .set({ Authorization: `Bearer ${token}` })
+    .send({
+      username: name,
+      avatarId: overrides.avatarId ?? 'avatar-01',
+      ...(overrides.bio ? { bio: overrides.bio } : {}),
+    })
+    .expect(200);
+  return {
+    ...user,
+    id: user.session.user.id,
+    username: name,
+    token,
+    auth: { Authorization: `Bearer ${token}` },
+  };
+}
