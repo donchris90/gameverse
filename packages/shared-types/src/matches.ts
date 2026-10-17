@@ -32,6 +32,10 @@ export interface MatchPlayerView {
   username: string;
   avatarId: string;
   ready: boolean;
+  /** False while a human has no live connection during an active match. Bots are always true. */
+  connected: boolean;
+  /** While disconnected: when the series is forfeited unless they come back. */
+  reconnectBy: string | null;
 }
 
 export interface MatchSeriesView {
@@ -80,6 +84,9 @@ export interface MatchView {
   createdAt: string;
   endedAt: string | null;
 }
+
+/** How long a disconnected player has to come back before the series is forfeited. */
+export const DISCONNECT_GRACE_MS = 30_000;
 
 export const matchIdSchema = z.uuid();
 

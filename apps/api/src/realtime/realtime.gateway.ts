@@ -142,6 +142,7 @@ export class RealtimeGateway implements OnApplicationBootstrap, OnApplicationShu
             Math.max(0, result.expiresAtMs - Date.now()),
           );
           ws.send(JSON.stringify({ type: 'ready', userId: result.userId }));
+          this.hub.notifySocketReady(result.userId, ws);
         });
         return;
       }

@@ -517,6 +517,9 @@ model GameMatchPlayer {
   userId   String?   @db.Uuid
   botLevel BotLevel?
   ready    Boolean   @default(false)
+  /// When the server first saw this human with no open socket during an active match. Cleared on
+  /// reconnect; if it stays set for the grace period the series is forfeited.
+  disconnectedAt DateTime? @db.Timestamptz(3)
 
   match GameMatch @relation(fields: [matchId], references: [id], onDelete: Cascade)
   user  User?     @relation(fields: [userId], references: [id], onDelete: Cascade)

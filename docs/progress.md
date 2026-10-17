@@ -187,3 +187,21 @@ Bug found and fixed on the way: the simultaneous-join test returned 500 in about
 Mutation checks (11): removing the block filter, the in-match filter (first **survived**, test added), the rating-band check, the expiry check, the invitee check, the guest-queue cleanup, the failed-guess counter, the code-visibility rule, the queue-expiry sweep and the hosting check were each caught; originals restored and the suite re-run green.
 
 Limits: ratings are a constant 1000 until 2F; the lobby sweeper (2 s) is off under `NODE_ENV=test` and tests call `runMatchmaking()` / `expireRooms()` directly; join-guess limiting is in memory (single instance, like presence). Deploy: `prisma migrate deploy` in the Render start command will apply the new migration; the build command is unchanged.
+
+### Slice 2D: connection handling, resume, action limits (done, 2026-10-18)
+
+New: migration `20261018180000_match_connection` (adds `disconnectedAt`; hand-written, **`prisma migrate deploy` and drift check unverified**), `ActionLimiter`, hub hooks `onSocketReady` / `sendToSocket`, `MatchesService.runConnectionChecks`, `connected` and `reconnectBy` on each player of `MatchView`, `DISCONNECT_GRACE_MS`. Decisions #56 to #58.
+
+| Command                                                                                  | Result                                                                                            |
+| ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `npx prettier --check .` then `npx turbo run lint typecheck build test --env-mode=loose` | clean; 22/22 tasks (api 125, shared-types 23, design-system 24, game-rules 32)                    |
+| `pnpm --filter @gameverse/api test:integration`                                          | 17 files, **401/401 passed** on the last two full runs (19 new in `matches-realtime.e2e-spec.ts`) |
+| `pnpm --filter @gameverse/api smoke:dist`                                                | compiled API is up and ready                                                                      |
+
+What the tests prove (real Postgres, HTTP and WebSocket): a connecting client gets its match straight away, equal to the REST view; after a drop, moves made while away are all present on reconnect with the same version; a second device gets it too; nothing is sent when there is no open match; an offline player is shown as disconnected to the opponent live, with the deadline, without changing the version; forfeit happens at exactly 30 s and not 1 ms earlier, once, even with three sweepers at once, and the event log stays gap-free; returning inside the grace cancels it at once; a reconnect between check and forfeit wins; if both are gone the earlier leaver loses; matches not yet started are untouched; the 31st action in 10 s gets 429 and changes nothing, it is per account, and reads are unlimited.
+
+Mutation checks (9): each of outer and inner grace check, snapshot send, reconnect clearing, move rate limit, earliest-first choice, sweep clearing, restricting to ACTIVE matches and the opponent publish was caught. One bug found by the tests along the way: a rolled-back retry left the "ended" flag set, so racing sweepers each reported a forfeit; the flag is now reset per attempt. An existing 2B test was updated because a connecting client now receives a snapshot before later updates.
+
+Observed once and not reproduced: in one of four full integration runs, "a deadline that is not yet due is left alone" failed; it passed in the next 8 runs including repeated runs of the match files together. Cause unknown; watch for it in CI.
+
+Limits: sweeping runs every second and only on this instance (in-memory sockets); frame rate limiting on the socket already existed; the grace and limits are constants in shared-types and matches.constants.

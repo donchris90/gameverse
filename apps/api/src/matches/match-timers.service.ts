@@ -31,8 +31,7 @@ export class MatchTimersService implements OnApplicationBootstrap, OnApplication
     this.timer = setInterval(() => {
       if (this.running) return;
       this.running = true;
-      this.matches
-        .runDueTimers()
+      Promise.all([this.matches.runDueTimers(), this.matches.runConnectionChecks()])
         .catch((error: unknown) => {
           this.logger.warn(`match sweep failed: ${String(error)}`);
         })

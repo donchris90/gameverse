@@ -1,5 +1,6 @@
-import { HttpStatus, Injectable } from '@nestjs/common';
+import { HttpStatus, Injectable, type OnModuleInit } from '@nestjs/common';
 import {
+  DISCONNECT_GRACE_MS,
   ErrorCode,
   type GameId,
   type MatchKind,
@@ -19,13 +20,17 @@ import {
   type SeriesError,
   type SeriesState,
 } from '@gameverse/game-rules';
+import type { WebSocket } from 'ws';
 import { AppException } from '../common/app.exception.js';
 import type { BotLevel, Prisma } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { RealtimeHub } from '../realtime/realtime.hub.js';
 import { isBlockedEitherWay } from '../social/relationships.js';
 import { runSerializable, type Tx } from '../social/serializable.js';
+import { ActionLimiter } from './action-limiter.js';
 import {
+  ACTION_LIMIT,
+  ACTION_WINDOW_MS,
   NEXT_GAME_DELAY_MS,
   OPEN_STATUSES,
   READY_TIMEOUT_MS,
@@ -102,11 +107,31 @@ function toJson(series: SeriesState): Prisma.InputJsonValue {
 }
 
 @Injectable()
-export class MatchesService {
+export class MatchesService implements OnModuleInit {
+  private readonly limiter = new ActionLimiter(ACTION_LIMIT, ACTION_WINDOW_MS);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly hub: RealtimeHub,
   ) {}
+
+  onModuleInit(): void {
+    // A client that (re)connects gets the exact current state of its match straight away.
+    this.hub.onSocketReady((userId, socket) => {
+      void this.sendSnapshot(userId, socket);
+    });
+  }
+
+  /** Per-account cap on match actions; the per-IP throttler alone would punish shared carrier IPs. */
+  private consumeAction(userId: string): void {
+    if (!this.limiter.tryConsume(userId)) {
+      throw new AppException(
+        HttpStatus.TOO_MANY_REQUESTS,
+        ErrorCode.RATE_LIMITED,
+        'Too many actions. Slow down a little.',
+      );
+    }
+  }
 
   // ---------------------------------------------------------------- reading
 
@@ -350,6 +375,7 @@ export class MatchesService {
   }
 
   async ready(userId: string, matchId: string): Promise<MatchView> {
+    this.consumeAction(userId);
     const match = await this.mutate(matchId, userId, (current): Outcome => {
       const seat = this.seatOf(current, userId);
       if (seat === null) throw notFound();
@@ -380,6 +406,7 @@ export class MatchesService {
   }
 
   async move(userId: string, matchId: string, request: MoveRequest): Promise<MatchView> {
+    this.consumeAction(userId);
     const match = await this.mutate(matchId, userId, async (current, tx): Promise<Outcome> => {
       const seat = this.seatOf(current, userId);
       if (seat === null) throw notFound();
@@ -429,6 +456,7 @@ export class MatchesService {
   }
 
   async leave(userId: string, matchId: string): Promise<MatchView> {
+    this.consumeAction(userId);
     const match = await this.mutate(matchId, userId, (current): Outcome => {
       const seat = this.seatOf(current, userId);
       if (seat === null) throw notFound();
@@ -469,6 +497,7 @@ export class MatchesService {
    * opener alternates, and asking twice - or both asking at the same instant - makes only one.
    */
   async rematch(userId: string, matchId: string): Promise<MatchView> {
+    this.consumeAction(userId);
     let created: string | null = null;
     const match = await this.mutate(matchId, userId, async (current, tx): Promise<Outcome> => {
       const seat = this.seatOf(current, userId);
@@ -596,5 +625,112 @@ export class MatchesService {
       }
     }
     return handled;
+  }
+  // -------------------------------------------------------------- connections
+
+  /**
+   * Sent to a socket that has just authenticated. Reconnecting also ends any disconnect countdown
+   * for this player at once, instead of waiting for the next sweep.
+   */
+  private async sendSnapshot(userId: string, socket: WebSocket): Promise<void> {
+    try {
+      const reconnected = await this.prisma.gameMatchPlayer.findMany({
+        where: { userId, disconnectedAt: { not: null }, match: { status: 'ACTIVE' } },
+        select: { matchId: true },
+      });
+      if (reconnected.length > 0) {
+        await this.prisma.gameMatchPlayer.updateMany({
+          where: { userId, disconnectedAt: { not: null }, match: { status: 'ACTIVE' } },
+          data: { disconnectedAt: null },
+        });
+        for (const { matchId } of reconnected) await this.publish(matchId);
+      }
+      const { match } = await this.current(userId);
+      if (match !== null) this.hub.sendToSocket(socket, { type: 'match.update', match });
+    } catch {
+      // best effort: the client can always GET /v1/matches/current
+    }
+  }
+
+  /**
+   * Sweeper step. For every human in an active match: note when their last socket went away,
+   * clear the note when they are back, and forfeit the series once they have been gone for the
+   * whole grace period. Turn timers keep running meanwhile, so a missing player also times out.
+   * Returns how many series were forfeited.
+   */
+  async runConnectionChecks(now = new Date()): Promise<number> {
+    this.limiter.prune(now.getTime());
+    const active = await this.prisma.gameMatch.findMany({
+      where: { status: 'ACTIVE' },
+      include: { players: true },
+      take: SWEEP_BATCH * 4,
+    });
+    let forfeited = 0;
+    for (const match of active) {
+      try {
+        let changed = false;
+        const gone: { seat: Seat; since: Date }[] = [];
+        for (const player of match.players) {
+          if (player.userId === null) continue;
+          const online = this.hub.isOnline(player.userId);
+          if (online && player.disconnectedAt !== null) {
+            await this.prisma.gameMatchPlayer.update({
+              where: { matchId_seat: { matchId: match.id, seat: player.seat } },
+              data: { disconnectedAt: null },
+            });
+            changed = true;
+          } else if (!online && player.disconnectedAt === null) {
+            await this.prisma.gameMatchPlayer.update({
+              where: { matchId_seat: { matchId: match.id, seat: player.seat } },
+              data: { disconnectedAt: now },
+            });
+            changed = true;
+          } else if (!online && player.disconnectedAt !== null) {
+            gone.push({ seat: player.seat as Seat, since: player.disconnectedAt });
+          }
+        }
+        const overdue = gone
+          .filter((entry) => now.getTime() - entry.since.getTime() >= DISCONNECT_GRACE_MS)
+          .sort((a, b) => a.since.getTime() - b.since.getTime() || a.seat - b.seat)[0];
+        if (
+          overdue !== undefined &&
+          (await this.forfeitDisconnected(match.id, overdue.seat, now))
+        ) {
+          forfeited += 1;
+        } else if (changed) {
+          await this.publish(match.id);
+        }
+      } catch {
+        // one failing match must not stop the others; the next sweep retries
+      }
+    }
+    return forfeited;
+  }
+
+  private async forfeitDisconnected(matchId: string, seat: Seat, now: Date): Promise<boolean> {
+    let ended = false;
+    await this.mutate(matchId, null, (current): Outcome => {
+      ended = false; // the decision may run again after a rolled-back attempt
+      if (current.status !== 'ACTIVE') return { changed: false };
+      const player = current.players.find((candidate) => candidate.seat === seat);
+      // Re-checked inside the transaction: a reconnect that landed meanwhile cancels the forfeit.
+      if (
+        !player ||
+        player.disconnectedAt === null ||
+        now.getTime() - player.disconnectedAt.getTime() < DISCONNECT_GRACE_MS
+      ) {
+        return { changed: false };
+      }
+      const before = seriesOf(current);
+      if (before === null) return { changed: false };
+      const forfeit = forfeitSeries(before, seat);
+      if (!forfeit.ok) return { changed: false };
+      const events: EventDraft[] = [{ type: 'PLAYER_DISCONNECTED', seat }];
+      const patch = this.afterSeriesChange(forfeit.series, events, now);
+      patch.endReason = 'disconnected';
+      ended = true;
+      return { changed: true, change: { patch, events } };
+    });
+    return ended;
   }
 }

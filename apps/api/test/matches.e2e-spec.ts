@@ -728,16 +728,13 @@ describe('matches (session service over REST)', () => {
       const version = (await current(pair)).version;
       await move(pair.a, pair.id, 4, version).expect(200);
 
-      const seenByB = (await waitFor(
-        cb.events,
-        (e) => e['type'] === 'match.update',
-      )) as unknown as {
+      // A connecting client first receives a snapshot (slice 2D); the move is the later update.
+      const isMove = (e: Record<string, unknown>) =>
+        e['type'] === 'match.update' && (e['match'] as MatchView).version === version + 1;
+      const seenByB = (await waitFor(cb.events, isMove)) as unknown as {
         match: MatchView;
       };
-      const seenByA = (await waitFor(
-        ca.events,
-        (e) => e['type'] === 'match.update',
-      )) as unknown as {
+      const seenByA = (await waitFor(ca.events, isMove)) as unknown as {
         match: MatchView;
       };
       expect(seenByA.match.mySeat).toBe(0);

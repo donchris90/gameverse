@@ -11,3 +11,7 @@ export const OPEN_STATUSES = ['WAITING', 'READY', 'ACTIVE'] as const;
 
 export const BOT_NAME = 'Bot';
 export const BOT_AVATAR_ID = 'bot';
+
+/** Match actions (ready, move, leave, rematch) a single player may send in one window. */
+export const ACTION_LIMIT = 30;
+export const ACTION_WINDOW_MS = 10_000;

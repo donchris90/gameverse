@@ -11,11 +11,37 @@ export const MAX_SOCKETS_PER_USER = 5;
 @Injectable()
 export class RealtimeHub {
   private readonly sockets = new Map<string, Set<WebSocket>>();
+  private readonly readyListeners: ((userId: string, socket: WebSocket) => void)[] = [];
   private readonly presenceListeners: ((userId: string, online: boolean) => void)[] = [];
 
   /** Called when a user's first socket connects (true) or their last one goes away (false). */
   onPresenceChange(listener: (userId: string, online: boolean) => void): void {
     this.presenceListeners.push(listener);
+  }
+
+  /** Called for every authenticated socket right after it receives `ready` (including 2nd devices). */
+  onSocketReady(listener: (userId: string, socket: WebSocket) => void): void {
+    this.readyListeners.push(listener);
+  }
+
+  notifySocketReady(userId: string, socket: WebSocket): void {
+    for (const listener of this.readyListeners) {
+      try {
+        listener(userId, socket);
+      } catch {
+        // a faulty listener must never break socket handling
+      }
+    }
+  }
+
+  /** Sends to one socket only (a snapshot for a client that just connected). */
+  sendToSocket(socket: WebSocket, event: RealtimeEvent): void {
+    if (socket.readyState !== socket.OPEN) return;
+    try {
+      socket.send(JSON.stringify(event));
+    } catch {
+      socket.terminate();
+    }
   }
 
   private emitPresence(userId: string, online: boolean): void {

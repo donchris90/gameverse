@@ -1,8 +1,9 @@
-import type {
-  BotLevelName,
-  MatchPlayerView,
-  MatchSeriesView,
-  MatchView,
+import {
+  DISCONNECT_GRACE_MS,
+  type BotLevelName,
+  type MatchPlayerView,
+  type MatchSeriesView,
+  type MatchView,
 } from '@gameverse/shared-types';
 import { seatToMove, type SeriesState } from '@gameverse/game-rules';
 import type { GameMatch, GameMatchPlayer } from '../generated/prisma/client.js';
@@ -52,6 +53,8 @@ function toPlayerView(player: GameMatchPlayer, profiles: ProfileLookup): MatchPl
       username: BOT_NAME,
       avatarId: BOT_AVATAR_ID,
       ready: player.ready,
+      connected: true,
+      reconnectBy: null,
     };
   }
   const profile = profiles.get(player.userId);
@@ -62,6 +65,11 @@ function toPlayerView(player: GameMatchPlayer, profiles: ProfileLookup): MatchPl
     username: profile?.username ?? 'Player',
     avatarId: profile?.avatarId ?? 'avatar-01',
     ready: player.ready,
+    connected: player.disconnectedAt === null,
+    reconnectBy:
+      player.disconnectedAt === null
+        ? null
+        : new Date(player.disconnectedAt.getTime() + DISCONNECT_GRACE_MS).toISOString(),
   };
 }
 
