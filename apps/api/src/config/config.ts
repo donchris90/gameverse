@@ -44,6 +44,12 @@ const envSchema = z
     EMAIL_PROVIDER: z.enum(['console', 'memory']).default('console'),
     EMAIL_FROM: z.string().min(3).default('GameVerse <no-reply@example.invalid>'),
 
+    AGORA_APP_ID: z.string().trim().optional(),
+    AGORA_APP_CERTIFICATE: z.string().trim().optional(),
+    VOICE_TOKEN_TTL_SECONDS: z.coerce.number().int().min(60).max(86_400).default(3600),
+    /** Enables the Phase 0 voice spike token endpoint. Development and test only. */
+    VOICE_SPIKE_ENABLED: booleanString,
+
     RATE_LIMIT_DEFAULT_PER_MIN: z.coerce.number().int().min(1).max(100_000).default(120),
     RATE_LIMIT_AUTH_PER_MIN: z.coerce.number().int().min(1).max(10_000).default(10),
   })
@@ -67,6 +73,13 @@ const envSchema = z
         message:
           'no production email provider is integrated yet; development providers are not allowed in staging/production',
       });
+      if (config.VOICE_SPIKE_ENABLED) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['VOICE_SPIKE_ENABLED'],
+          message: 'the voice spike endpoint is not allowed in staging/production',
+        });
+      }
       if (config.CORS_ORIGINS.includes('*')) {
         ctx.addIssue({
           code: 'custom',

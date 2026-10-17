@@ -10,12 +10,16 @@ Phase 0 is **not complete**. The API, shared packages, CI, and mobile/admin scaf
 | ------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
 | `npx prettier --check .`                                                                    | All matched files use Prettier code style                                                            |
 | `pnpm lint` (oxlint)                                                                        | 0 warnings, 0 errors in all 3 packages                                                               |
-| `PRISMA_SCHEMA_ENGINE_BINARY=/bin/true npx turbo run typecheck build test --env-mode=loose` | 10/10 tasks successful. Unit tests: shared-types 23/23, design-system 24/24, api 24/24               |
+| `PRISMA_SCHEMA_ENGINE_BINARY=/bin/true npx turbo run typecheck build test --env-mode=loose` | 10/10 tasks successful. Unit tests: shared-types 23/23, design-system 24/24, api 31/31               |
 | `pnpm --filter @gameverse/api test:integration`                                             | 5 files, **90/90 passed** (real Postgres, real HTTP app)                                             |
 | `node dist/main.js` smoke test against dev DB                                               | live/ready OK; register OK; under-16 rejected `UNDER_MINIMUM_AGE`; unauthenticated `/v1/me` rejected |
 | `pnpm db:seed` (dev) / with `NODE_ENV=production`                                           | seeds 3 local users / refuses to run                                                                 |
 
 Mutation checks: five deliberately introduced bugs were each caught by the suite (5/5), then reverted; the unit and integration suites were re-run green afterwards (rows above).
+
+### Voice spike code (added after the first commits)
+
+Backend `VoiceProvider` + Agora implementation and the spike token endpoint, plus a mobile spike screen. Mutation check: bypassing the `VOICE_SPIKE_ENABLED` gate made the 404 test fail; restored and re-run green. Details and the unverified list are in `docs/voice-spike.md`. **The spike itself has not run.**
 
 ### Mobile and admin scaffolds
 
@@ -40,10 +44,10 @@ Mutation checks: five deliberately introduced bugs were each caught by the suite
 
 ### Remaining for Phase 0
 
-1. Backend Agora token endpoint, then the two-phone spike (needs Agora App ID/certificate and two physical phones, one low-end Android).
+1. Run the two-phone spike (needs Agora App ID/certificate and two physical phones, one low-end Android); steps in `docs/voice-spike.md`.
 2. Push to GitHub and confirm CI is green (owner action: create the repo).
 3. Owner checkpoint: review schema, auth design, spike result.
 
 ### Next exact action
 
-Build the backend Agora token endpoint behind a `VoiceProvider` interface, then ask the owner for Agora credentials and two phones to run the spike.
+Owner supplies Agora credentials and two phones; run the spike and record the result.

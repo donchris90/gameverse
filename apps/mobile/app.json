@@ -7,8 +7,19 @@
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
     "plugins": ["expo-router", "expo-dev-client"],
-    "experiments": { "typedRoutes": true },
-    "ios": { "bundleIdentifier": "com.gameverse.app.dev", "supportsTablet": false },
-    "android": { "package": "com.gameverse.app.dev" }
+    "experiments": {
+      "typedRoutes": true
+    },
+    "ios": {
+      "bundleIdentifier": "com.gameverse.app.dev",
+      "supportsTablet": false,
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "GameVerse uses the microphone for voice chat in matches."
+      }
+    },
+    "android": {
+      "package": "com.gameverse.app.dev",
+      "permissions": ["RECORD_AUDIO", "MODIFY_AUDIO_SETTINGS", "INTERNET"]
+    }
   }
 }

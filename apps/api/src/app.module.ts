@@ -11,6 +11,7 @@ import { ConfigModule } from './config/config.module.js';
 import { HealthModule } from './health/health.module.js';
 import { PrismaModule } from './prisma/prisma.module.js';
 import { UsersModule } from './users/users.module.js';
+import { VoiceModule } from './voice/voice.module.js';
 
 const REQUEST_ID_PATTERN = /^[\w-]{8,64}$/;
 
@@ -61,6 +62,7 @@ export class AppModule {
         PrismaModule,
         AuthModule,
         UsersModule,
+        VoiceModule,
         HealthModule,
       ],
       providers: [
