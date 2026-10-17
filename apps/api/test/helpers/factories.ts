@@ -103,3 +103,39 @@ export async function registerWithProfile(
     auth: { Authorization: `Bearer ${token}` },
   };
 }
+
+/** Makes two onboarded users friends through the real API. */
+export async function befriend(t: TestApp, a: SocialUser, b: SocialUser): Promise<void> {
+  await request(t.server)
+    .post('/v1/friends/requests')
+    .set(a.auth)
+    .send({ userId: b.id })
+    .expect(200);
+  const incoming = await request(t.server)
+    .get('/v1/friends/requests?direction=incoming')
+    .set(b.auth)
+    .expect(200);
+  const id = (incoming.body.items as { id: string }[])[0]?.id;
+  await request(t.server)
+    .post(`/v1/friends/requests/${String(id)}/accept`)
+    .set(b.auth)
+    .expect(204);
+}
+
+/** Opens (or fetches) the conversation between two users and returns its id. */
+export async function openConversation(
+  t: TestApp,
+  from: SocialUser,
+  to: SocialUser,
+): Promise<string> {
+  const response = await request(t.server)
+    .post('/v1/conversations')
+    .set(from.auth)
+    .send({ userId: to.id })
+    .expect(200);
+  return (response.body as { id: string }).id;
+}
+
+export function newClientMessageId(): string {
+  return crypto.randomUUID();
+}

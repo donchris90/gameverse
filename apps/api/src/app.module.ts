@@ -12,6 +12,8 @@ import { HealthModule } from './health/health.module.js';
 import { PrismaModule } from './prisma/prisma.module.js';
 import { ProfilesModule } from './profiles/profiles.module.js';
 import { SocialModule } from './social/social.module.js';
+import { ChatModule } from './chat/chat.module.js';
+import { RealtimeModule } from './realtime/realtime.module.js';
 import { UsersModule } from './users/users.module.js';
 import { VoiceModule } from './voice/voice.module.js';
 
@@ -65,6 +67,8 @@ export class AppModule {
         AuthModule,
         ProfilesModule,
         SocialModule,
+        RealtimeModule,
+        ChatModule,
         UsersModule,
         VoiceModule,
         HealthModule,

@@ -69,6 +69,11 @@ model User {
   blocksMade             BlockedUser[]   @relation("BlockBlocker")
   blocksReceived         BlockedUser[]   @relation("BlockBlocked")
 
+  conversationsAsLow  Conversation[]       @relation("ConversationLow")
+  conversationsAsHigh Conversation[]       @relation("ConversationHigh")
+  conversationMembers ConversationMember[]
+  messagesSent        Message[]
+
   @@index([status])
   @@map("users")
 }
@@ -233,4 +238,61 @@ model BlockedUser {
   @@unique([blockerId, blockedId])
   @@index([blockedId])
   @@map("blocked_users")
+}
+
+/// A 1:1 conversation; exactly one per pair of users (sorted-pair unique key).
+model Conversation {
+  id            String    @id @default(uuid(7)) @db.Uuid
+  userLowId     String    @db.Uuid
+  userHighId    String    @db.Uuid
+  createdAt     DateTime  @default(now()) @db.Timestamptz(3)
+  /// Set when a message is sent; used to order the conversation list.
+  lastMessageAt DateTime? @db.Timestamptz(3)
+
+  userLow  User @relation("ConversationLow", fields: [userLowId], references: [id], onDelete: Cascade)
+  userHigh User @relation("ConversationHigh", fields: [userHighId], references: [id], onDelete: Cascade)
+
+  members  ConversationMember[]
+  messages Message[]
+
+  @@unique([userLowId, userHighId])
+  @@index([userHighId])
+  @@index([userLowId, lastMessageAt])
+  @@map("conversations")
+}
+
+/// Per-person state for a conversation: read position and mute.
+model ConversationMember {
+  conversationId    String   @db.Uuid
+  userId            String   @db.Uuid
+  /// Messages are UUIDv7 (time ordered), so "read up to" is the greatest message id the user has seen.
+  lastReadMessageId String?  @db.Uuid
+  /// Muted conversations still deliver in-app but send no push notifications.
+  muted             Boolean  @default(false)
+  createdAt         DateTime @default(now()) @db.Timestamptz(3)
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([conversationId, userId])
+  @@index([userId])
+  @@map("conversation_members")
+}
+
+model Message {
+  id              String   @id @default(uuid(7)) @db.Uuid
+  conversationId  String   @db.Uuid
+  senderId        String   @db.Uuid
+  body            String   @db.VarChar(2000)
+  /// Client-generated idempotency key: a retried send returns the original message.
+  clientMessageId String   @db.Uuid
+  createdAt       DateTime @default(now()) @db.Timestamptz(3)
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender       User         @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, senderId, clientMessageId])
+  @@index([conversationId, id])
+  @@index([senderId, createdAt])
+  @@map("messages")
 }

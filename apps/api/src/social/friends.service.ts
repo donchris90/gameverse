@@ -13,43 +13,15 @@ import {
 import { AppException } from '../common/app.exception.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { orderedPair } from './pair.js';
+import { requireOwnProfile, requireVisibleUser, userNotFound } from './guards.js';
 import { areFriends, isBlockedEitherWay, relationshipsFor, toCard } from './relationships.js';
 import { runSerializable, type Tx } from './serializable.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-function userNotFound(): AppException {
-  // Same answer for "does not exist", "blocked either way" and "not active", so none can be probed.
-  return new AppException(HttpStatus.NOT_FOUND, ErrorCode.NOT_FOUND, 'User not found');
-}
-
 @Injectable()
 export class FriendsService {
   constructor(private readonly prisma: PrismaService) {}
-
-  /** The target must be an active user with a profile and no block in either direction. */
-  private async requireVisibleUser(db: Tx, me: string, targetId: string): Promise<void> {
-    const target = await db.user.findUnique({
-      where: { id: targetId },
-      select: { status: true, profile: { select: { userId: true } } },
-    });
-    if (!target || target.status !== 'ACTIVE' || !target.profile) throw userNotFound();
-    if (await isBlockedEitherWay(db, me, targetId)) throw userNotFound();
-  }
-
-  private async requireOwnProfile(db: Tx, me: string): Promise<void> {
-    const own = await db.userProfile.findUnique({
-      where: { userId: me },
-      select: { userId: true },
-    });
-    if (!own) {
-      throw new AppException(
-        HttpStatus.CONFLICT,
-        ErrorCode.PROFILE_REQUIRED,
-        'Choose a username before adding friends',
-      );
-    }
-  }
 
   async sendRequest(
     me: string,
@@ -64,8 +36,8 @@ export class FriendsService {
       );
     }
     return runSerializable(this.prisma, async (tx) => {
-      await this.requireOwnProfile(tx, me);
-      await this.requireVisibleUser(tx, me, targetId);
+      await requireOwnProfile(tx, me);
+      await requireVisibleUser(tx, me, targetId);
 
       if (await areFriends(tx, me, targetId)) return { status: 'FRIENDS' as const };
 

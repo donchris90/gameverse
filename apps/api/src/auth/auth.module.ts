@@ -3,6 +3,7 @@ import { MailModule } from '../mail/mail.module.js';
 import { AuthController } from './auth.controller.js';
 import { AuthService } from './auth.service.js';
 import { JwtAuthGuard } from './jwt-auth.guard.js';
+import { SessionAuthenticator } from './session-authenticator.js';
 import { PasswordService } from './password.service.js';
 import {
   SOCIAL_KEY_RESOLVERS,
@@ -20,8 +21,9 @@ import { TokenService } from './token.service.js';
     PasswordService,
     SocialTokenVerifier,
     JwtAuthGuard,
+    SessionAuthenticator,
     { provide: SOCIAL_KEY_RESOLVERS, useFactory: createRemoteKeyResolvers },
   ],
-  exports: [JwtAuthGuard, TokenService],
+  exports: [JwtAuthGuard, SessionAuthenticator, TokenService],
 })
 export class AuthModule {}

@@ -55,3 +55,8 @@ export const MAX_PENDING_OUTGOING_REQUESTS = 100;
 export const FRIEND_REQUEST_REJECTION_COOLDOWN_DAYS = 30;
 export const USER_SEARCH_MIN_LENGTH = 2;
 export const PAGE_SIZE_MAX = 100;
+
+export const MESSAGE_MAX_LENGTH = 2000;
+/** At most this many messages per sender in the burst window (checked server-side). */
+export const MESSAGE_BURST_LIMIT = 20;
+export const MESSAGE_BURST_WINDOW_SECONDS = 10;

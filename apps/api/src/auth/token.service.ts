@@ -47,6 +47,14 @@ export class TokenService {
 
   /** Verifies signature, algorithm (HS256 only), issuer, audience and expiry. */
   async verifyAccessToken(token: string): Promise<AccessClaims> {
+    const { sub, role } = await this.verifyAccessTokenWithExpiry(token);
+    return { sub, role };
+  }
+
+  /** Same checks as verifyAccessToken, also returning the expiry (epoch ms) for long-lived sockets. */
+  async verifyAccessTokenWithExpiry(
+    token: string,
+  ): Promise<AccessClaims & { expiresAtMs: number }> {
     try {
       const { payload } = await jwtVerify(token, this.key, {
         algorithms: ['HS256'],
@@ -56,7 +64,12 @@ export class TokenService {
       if (typeof payload.sub !== 'string' || typeof payload['role'] !== 'string') {
         throw new errors.JWTInvalid('missing claims');
       }
-      return { sub: payload.sub, role: payload['role'] as UserRole };
+      if (typeof payload.exp !== 'number') throw new errors.JWTInvalid('missing exp');
+      return {
+        sub: payload.sub,
+        role: payload['role'] as UserRole,
+        expiresAtMs: payload.exp * 1000,
+      };
     } catch (error) {
       if (error instanceof errors.JWTExpired) {
         throw new AppException(
