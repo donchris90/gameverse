@@ -130,3 +130,22 @@ Gate after this work: prettier clean; `npx turbo run lint typecheck build test -
 ### Next exact action
 
 Owner checkpoint for Phase 1. Needed from the owner: approve (or request changes to) Phase 1; decide on the mobile gaps above (email-link handling and verify / reset screens); provide Agora credentials and two phones for the voice spike. Phase 2 (session framework, tic-tac-toe, `packages/game-rules`) starts only after approval.
+
+## Phase 2 (in progress)
+
+Plan: `docs/phase-2-plan.md`. Owner approval recorded in decisions #47.
+
+### Slice 2A: `packages/game-rules` (done, 2026-10-17)
+
+Pure tic-tac-toe rules, best-of-three series (alternating opener, 20 s turn timeout, forfeit after two consecutive timeouts, forfeit on leave, rematch) and bots (easy random, medium heuristic, hard minimax) that only suggest a cell which must still pass the normal validator.
+
+| Command                                                                                  | Result                                                                                    |
+| ---------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `pnpm --filter @gameverse/game-rules test`                                               | 3 files, **32/32 passed**                                                                 |
+| `npx prettier --check .` then `npx turbo run lint typecheck build test --env-mode=loose` | clean; 22/22 tasks successful (api 104, shared-types 23, design-system 24, game-rules 32) |
+
+Exhaustive checks inside the tests: every one of the 255,168 possible games is played and the totals equal the known figures (X 131,184 / O 77,904 / draws 46,080; 5,478 reachable positions; 81,792 ninth-move wins) with an independently written winner check; the hard bot never loses as X or O against every possible reply; every bot, at every level, returns a move the validator accepts in all 4,520 open positions.
+
+Mutation checks: five deliberate bugs (no draw detection, opener not alternating, timeouts not cleared by a move, hard bot picking the worst move, timeout awarding the game to the loser) were each caught (5/5), then reverted and the suite re-run green.
+
+Not done yet: everything server-side (2B onward). Nothing in 2A is wired into the API or the apps.
