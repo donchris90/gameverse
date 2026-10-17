@@ -1,3 +1,4 @@
+import { DEFAULT_RATING } from '@gameverse/game-rules';
 import { QUEUE_BOT_OFFER_AFTER_MS, QUEUE_TTL_MS } from '@gameverse/shared-types';
 
 /** Rating difference accepted at the start of a search. */
@@ -5,9 +6,8 @@ export const BAND_START = 100;
 /** The band grows by this much every BAND_STEP_MS of waiting. */
 export const BAND_GROWTH = 50;
 export const BAND_STEP_MS = 5_000;
-export const DEFAULT_RATING = 1000;
 
-export { QUEUE_BOT_OFFER_AFTER_MS, QUEUE_TTL_MS };
+export { DEFAULT_RATING, QUEUE_BOT_OFFER_AFTER_MS, QUEUE_TTL_MS };
 
 /** How far apart two ratings may be for a player who has waited `waitedMs`. */
 export function ratingBand(waitedMs: number): number {

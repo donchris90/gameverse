@@ -84,9 +84,13 @@ model User {
   deviceTokens DeviceToken[]
 
   gameSeats   GameMatchPlayer[]
-  hostedRooms GameRoom[]        @relation("RoomHost")
-  roomInvites GameRoom[]        @relation("RoomInvitee")
-  queueEntry  MatchQueueEntry?  @relation("QueueUser")
+  resultSeats GameResultPlayer[] @relation("ResultPlayerUser")
+  ratings     PlayerRating[]     @relation("PlayerRatingUser")
+  statistics  PlayerStatistics[] @relation("PlayerStatisticsUser")
+  experience  PlayerExperience?  @relation("PlayerExperienceUser")
+  hostedRooms GameRoom[]         @relation("RoomHost")
+  roomInvites GameRoom[]         @relation("RoomInvitee")
+  queueEntry  MatchQueueEntry?   @relation("QueueUser")
 
   @@index([status])
   @@map("users")
@@ -503,6 +507,7 @@ model GameMatch {
   game          Game              @relation(fields: [gameId], references: [id])
   players       GameMatchPlayer[]
   events        GameEvent[]
+  result        GameResult?
   rematchMatch  GameMatch?        @relation("Rematch", fields: [rematchMatchId], references: [id], onDelete: SetNull)
   rematchSource GameMatch?        @relation("Rematch")
 
@@ -512,11 +517,11 @@ model GameMatch {
 
 /// A seat in a match: a human (userId) or a labelled bot (botLevel).
 model GameMatchPlayer {
-  matchId  String    @db.Uuid
-  seat     Int       @db.SmallInt
-  userId   String?   @db.Uuid
-  botLevel BotLevel?
-  ready    Boolean   @default(false)
+  matchId        String    @db.Uuid
+  seat           Int       @db.SmallInt
+  userId         String?   @db.Uuid
+  botLevel       BotLevel?
+  ready          Boolean   @default(false)
   /// When the server first saw this human with no open socket during an active match. Cleared on
   /// reconnect; if it stays set for the grace period the series is forfeited.
   disconnectedAt DateTime? @db.Timestamptz(3)
@@ -596,4 +601,89 @@ model MatchQueueEntry {
 
   @@index([gameId, joinedAt])
   @@map("match_queue_entries")
+}
+
+/// What a finished match did. One row per match (unique matchId), written in the same transaction
+/// that completes the match, so ratings and XP can never be applied twice or half-applied.
+model GameResult {
+  id            String    @id @default(uuid(7)) @db.Uuid
+  matchId       String    @unique @db.Uuid
+  gameId        String
+  kind          MatchKind
+  /// Quick match between two humans: the only kind that moves ratings.
+  ranked        Boolean
+  /// False when a ranked pair had already played its allowance of rated games in 24 hours.
+  ratingApplied Boolean
+  /// "lowUserId:highUserId" for two-human matches, used for the repeat-pair allowance.
+  pairKey       String?
+  endReason     String?
+  winnerSeat    Int?      @db.SmallInt
+  endedAt       DateTime  @db.Timestamptz(3)
+  createdAt     DateTime  @default(now()) @db.Timestamptz(3)
+
+  match   GameMatch          @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  players GameResultPlayer[]
+
+  @@index([pairKey, endedAt])
+  @@index([gameId, endedAt])
+  @@map("game_results")
+}
+
+model GameResultPlayer {
+  resultId     String  @db.Uuid
+  seat         Int     @db.SmallInt
+  /// Null for a bot, or after the player deleted their account.
+  userId       String? @db.Uuid
+  /// 1 win, 0.5 draw, 0 loss.
+  score        Float
+  ratingBefore Int?
+  ratingAfter  Int?
+  xp           Int     @default(0)
+
+  result GameResult @relation(fields: [resultId], references: [id], onDelete: Cascade)
+  user   User?      @relation("ResultPlayerUser", fields: [userId], references: [id], onDelete: SetNull)
+
+  @@id([resultId, seat])
+  @@index([userId])
+  @@map("game_result_players")
+}
+
+model PlayerRating {
+  userId     String   @db.Uuid
+  gameId     String
+  rating     Int
+  ratedGames Int      @default(0)
+  updatedAt  DateTime @default(now()) @updatedAt @db.Timestamptz(3)
+
+  user User @relation("PlayerRatingUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, gameId])
+  @@index([gameId, rating(sort: Desc)])
+  @@map("player_ratings")
+}
+
+model PlayerStatistics {
+  userId        String @db.Uuid
+  gameId        String
+  played        Int    @default(0)
+  wins          Int    @default(0)
+  losses        Int    @default(0)
+  draws         Int    @default(0)
+  winStreak     Int    @default(0)
+  bestWinStreak Int    @default(0)
+
+  user User @relation("PlayerStatisticsUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, gameId])
+  @@map("player_statistics")
+}
+
+model PlayerExperience {
+  userId    String   @id @db.Uuid
+  xp        Int      @default(0)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(3)
+
+  user User @relation("PlayerExperienceUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("player_experience")
 }

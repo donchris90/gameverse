@@ -24,6 +24,7 @@ import {
 } from '@gameverse/game-rules';
 import type { WebSocket } from 'ws';
 import { randomInt } from 'node:crypto';
+import { ResultsService } from '../progress/results.service.js';
 import { AppException } from '../common/app.exception.js';
 import type { BotLevel, Prisma } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
@@ -118,6 +119,7 @@ export class MatchesService implements OnModuleInit {
   constructor(
     private readonly prisma: PrismaService,
     private readonly hub: RealtimeHub,
+    private readonly results: ResultsService,
   ) {}
 
   onModuleInit(): void {
@@ -161,7 +163,10 @@ export class MatchesService implements OnModuleInit {
   }
 
   private async load(db: Tx, matchId: string): Promise<MatchRecord | null> {
-    return db.gameMatch.findUnique({ where: { id: matchId }, include: { players: true } });
+    return db.gameMatch.findUnique({
+      where: { id: matchId },
+      include: { players: true, result: { include: { players: true } } },
+    });
   }
 
   private async loadForMember(db: Tx, matchId: string, userId: string): Promise<MatchRecord> {
@@ -238,6 +243,11 @@ export class MatchesService implements OnModuleInit {
         data: event.data ?? undefined,
       })),
     });
+    // Completing a match and recording its result are one atomic step.
+    if (change.patch.status === 'COMPLETED') {
+      const finished = await this.load(tx, match.id);
+      if (finished) await this.results.record(tx, finished);
+    }
   }
 
   private async mutate(

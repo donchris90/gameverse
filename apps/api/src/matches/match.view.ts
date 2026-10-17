@@ -6,10 +6,19 @@ import {
   type MatchView,
 } from '@gameverse/shared-types';
 import { seatToMove, type SeriesState } from '@gameverse/game-rules';
-import type { GameMatch, GameMatchPlayer } from '../generated/prisma/client.js';
+import type {
+  GameMatch,
+  GameMatchPlayer,
+  GameResult,
+  GameResultPlayer,
+} from '../generated/prisma/client.js';
 import { BOT_AVATAR_ID, BOT_NAME } from './matches.constants.js';
 
-export type MatchRecord = GameMatch & { players: GameMatchPlayer[] };
+export type MatchRecord = GameMatch & {
+  players: GameMatchPlayer[];
+  /** Present once the match is over and its result was recorded. */
+  result?: (GameResult & { players: GameResultPlayer[] }) | null;
+};
 export type ProfileLookup = ReadonlyMap<string, { username: string; avatarId: string }>;
 
 const BOT_LEVELS: Record<'EASY' | 'MEDIUM' | 'HARD', BotLevelName> = {
@@ -103,6 +112,21 @@ export function toMatchView(
     serverTime: now.toISOString(),
     endReason: match.endReason,
     winnerSeat: match.winnerSeat === null ? null : (match.winnerSeat as 0 | 1),
+    result:
+      match.result === undefined || match.result === null
+        ? null
+        : {
+            ranked: match.result.ratingApplied,
+            players: [...match.result.players]
+              .sort((a, b) => a.seat - b.seat)
+              .map((row) => ({
+                seat: row.seat as 0 | 1,
+                userId: row.userId,
+                ratingBefore: row.ratingBefore,
+                ratingAfter: row.ratingAfter,
+                xp: row.xp,
+              })),
+          },
     rematchRequestedBy: requested,
     rematchMatchId: match.rematchMatchId,
     createdAt: match.createdAt.toISOString(),

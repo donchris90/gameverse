@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { MatchResultView } from './progress.js';
 
 /** Games the server can host. Only tic-tac-toe is playable so far. */
 export const GAME_IDS = ['tictactoe'] as const;
@@ -78,6 +79,8 @@ export interface MatchView {
   endReason: string | null;
   winnerSeat: 0 | 1 | null;
   /** Seats that have asked for a rematch. */
+  /** What the finished match did to ratings and XP; null while open or if nothing was recorded. */
+  result: MatchResultView | null;
   rematchRequestedBy: (0 | 1)[];
   /** Set once the rematch exists. */
   rematchMatchId: string | null;

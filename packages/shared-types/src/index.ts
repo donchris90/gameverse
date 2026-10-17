@@ -9,3 +9,4 @@ export * from './profile.js';
 export * from './social.js';
 export * from './matches.js';
 export * from './lobby.js';
+export * from './progress.js';

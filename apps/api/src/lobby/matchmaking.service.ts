@@ -27,9 +27,10 @@ export class MatchmakingService {
     private readonly matches: MatchesService,
   ) {}
 
-  /** The seam for slice 2F: until ratings exist everyone starts from the same number. */
-  private async ratingOf(_tx: Tx, _userId: string, _gameId: GameId): Promise<number> {
-    return DEFAULT_RATING;
+  /** Skill rating at the moment the search starts (1000 for a player with no rated games). */
+  private async ratingOf(tx: Tx, userId: string, gameId: GameId): Promise<number> {
+    const row = await tx.playerRating.findUnique({ where: { userId_gameId: { userId, gameId } } });
+    return row?.rating ?? DEFAULT_RATING;
   }
 
   // ------------------------------------------------------------------ status
