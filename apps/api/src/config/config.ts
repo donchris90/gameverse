@@ -50,6 +50,13 @@ const envSchema = z
     /** Enables the Phase 0 voice spike token endpoint. Development and test only. */
     VOICE_SPIKE_ENABLED: booleanString,
 
+    /** none = push disabled (nothing is sent). memory = tests only. expo = Expo push service. */
+    PUSH_PROVIDER: z.enum(['none', 'expo', 'memory']).default('none'),
+    EXPO_PUSH_URL: z.url().default('https://exp.host/--/api/v2/push/send'),
+    EXPO_ACCESS_TOKEN: z.string().trim().optional(),
+    /** How long a user must stay disconnected before friends are told they went offline. */
+    PRESENCE_OFFLINE_GRACE_MS: z.coerce.number().int().min(0).max(60_000).default(5000),
+
     RATE_LIMIT_DEFAULT_PER_MIN: z.coerce.number().int().min(1).max(100_000).default(120),
     RATE_LIMIT_AUTH_PER_MIN: z.coerce.number().int().min(1).max(10_000).default(10),
   })
@@ -73,6 +80,13 @@ const envSchema = z
         message:
           'no production email provider is integrated yet; development providers are not allowed in staging/production',
       });
+      if (config.PUSH_PROVIDER === 'memory') {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['PUSH_PROVIDER'],
+          message: 'the in-memory push provider is for tests only',
+        });
+      }
       if (config.VOICE_SPIKE_ENABLED) {
         ctx.addIssue({
           code: 'custom',

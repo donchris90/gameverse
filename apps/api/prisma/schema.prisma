@@ -33,6 +33,7 @@ enum AuthProvider {
 enum OneTimeTokenType {
   EMAIL_VERIFICATION
   PASSWORD_RESET
+  ACCOUNT_DELETION
 }
 
 model User {
@@ -52,6 +53,8 @@ model User {
   role            UserRole   @default(USER)
   status          UserStatus @default(ACTIVE)
   lastLoginAt     DateTime? @db.Timestamptz(3)
+  /// Set when the account is deleted; the row stays as an anonymised tombstone (see AccountService).
+  deletedAt       DateTime? @db.Timestamptz(3)
 
   createdAt DateTime @default(now()) @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @db.Timestamptz(3)
@@ -77,6 +80,8 @@ model User {
   reportsMade    ModerationReport[] @relation("ReportReporter")
   reportsAgainst ModerationReport[] @relation("ReportReported")
   moderationActionsAgainst ModerationAction[]
+
+  deviceTokens DeviceToken[]
 
   @@index([status])
   @@map("users")
@@ -386,4 +391,25 @@ model AuditLog {
   @@index([targetId, id])
   @@index([actorId, id])
   @@map("audit_logs")
+}
+
+enum DevicePlatform {
+  IOS
+  ANDROID
+}
+
+/// An Expo push token. One token belongs to one account at a time: registering it for another
+/// account moves it, so a shared or handed-over phone never delivers the previous owner's alerts.
+model DeviceToken {
+  id        String         @id @default(uuid(7)) @db.Uuid
+  userId    String         @db.Uuid
+  token     String         @unique
+  platform  DevicePlatform
+  createdAt DateTime       @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime       @updatedAt @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("device_tokens")
 }

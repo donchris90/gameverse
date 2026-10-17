@@ -12,6 +12,7 @@ import { AppException } from '../common/app.exception.js';
 import { isUniqueViolation } from '../common/db-errors.js';
 import type { Message } from '../generated/prisma/client.js';
 import { containsBlockedTerm } from '../moderation/text-filter.js';
+import { PushService } from '../push/push.service.js';
 import { RealtimeHub } from '../realtime/realtime.hub.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { requireOwnProfile, requireVisibleUser } from '../social/guards.js';
@@ -69,6 +70,7 @@ export class ChatService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly hub: RealtimeHub,
+    private readonly push: PushService,
   ) {}
 
   /** May `sender` start or continue a conversation with `recipient` right now? */
@@ -304,7 +306,36 @@ export class ChatService {
     const event = { type: 'message.new', conversationId, message: view } as const;
     this.hub.publishToUser(otherId, event);
     this.hub.publishToUser(me, event); // the sender's other devices
+    await this.pushNewMessage(me, otherId, conversationId);
     return { message: view, created: true };
+  }
+
+  /**
+   * Push only when the recipient is not already connected (they got it live) and has not muted the
+   * conversation. The text never goes in the notification: lock screens are not private.
+   */
+  private async pushNewMessage(
+    senderId: string,
+    recipientId: string,
+    conversationId: string,
+  ): Promise<void> {
+    if (this.hub.isOnline(recipientId)) return;
+    const [member, sender] = await Promise.all([
+      this.prisma.conversationMember.findUnique({
+        where: { conversationId_userId: { conversationId, userId: recipientId } },
+        select: { muted: true },
+      }),
+      this.prisma.userProfile.findUnique({
+        where: { userId: senderId },
+        select: { username: true },
+      }),
+    ]);
+    if (member?.muted || !sender) return;
+    this.push.notify(recipientId, {
+      title: sender.username,
+      body: 'Sent you a message',
+      data: { type: 'MESSAGE', conversationId },
+    });
   }
 
   async getMessages(

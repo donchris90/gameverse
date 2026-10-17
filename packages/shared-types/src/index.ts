@@ -2,6 +2,7 @@ export * from './age.js';
 export * from './auth.js';
 export * from './chat.js';
 export * from './constants.js';
+export * from './devices.js';
 export * from './errors.js';
 export * from './moderation.js';
 export * from './profile.js';

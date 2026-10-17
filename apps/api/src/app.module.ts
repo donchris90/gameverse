@@ -13,6 +13,7 @@ import { PrismaModule } from './prisma/prisma.module.js';
 import { ProfilesModule } from './profiles/profiles.module.js';
 import { SocialModule } from './social/social.module.js';
 import { ChatModule } from './chat/chat.module.js';
+import { PushModule } from './push/push.module.js';
 import { RealtimeModule } from './realtime/realtime.module.js';
 import { ModerationModule } from './moderation/moderation.module.js';
 import { UsersModule } from './users/users.module.js';
@@ -68,6 +69,7 @@ export class AppModule {
         AuthModule,
         ProfilesModule,
         SocialModule,
+        PushModule,
         RealtimeModule,
         ChatModule,
         ModerationModule,

@@ -10,6 +10,7 @@ import { AppException } from '../common/app.exception.js';
 import type { AuthUser } from '../auth/auth.types.js';
 import type { Prisma } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { PushService } from '../push/push.service.js';
 import { RealtimeHub } from '../realtime/realtime.hub.js';
 import { runSerializable, type Tx } from '../social/serializable.js';
 import { recordAudit } from './audit.service.js';
@@ -64,6 +65,7 @@ export class ModerationService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly hub: RealtimeHub,
+    private readonly push: PushService,
   ) {}
 
   /**
@@ -144,7 +146,10 @@ export class ModerationService {
       return true;
     });
 
-    if (changed && type !== 'REINSTATE') this.hub.disconnectUser(targetId);
+    if (changed && type !== 'REINSTATE') {
+      this.hub.disconnectUser(targetId);
+      await this.push.removeAllDevices(targetId);
+    }
   }
 
   private async requireOpenReportAbout(tx: Tx, reportId: string, targetId: string): Promise<void> {

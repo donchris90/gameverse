@@ -43,6 +43,24 @@ export class MailService {
     });
   }
 
+  async sendAccountDeletionEmail(to: string, rawToken: string): Promise<void> {
+    const link = `${this.baseUrl()}/delete-account?token=${encodeURIComponent(rawToken)}`;
+    await this.provider.send({
+      to,
+      subject: 'Confirm deleting your GameVerse account',
+      text: [
+        'We received a request to permanently delete your GameVerse account.',
+        '',
+        'To confirm, open this link while signed in to the app:',
+        link,
+        '',
+        'Deleting your account removes your profile, friends, chats and sign-in details. This cannot',
+        'be undone. The link expires in 1 hour. If you did not ask for this, ignore this email and',
+        'your account will stay as it is; consider changing your password.',
+      ].join('\n'),
+    });
+  }
+
   private baseUrl(): string {
     return this.config.PUBLIC_WEB_URL.replace(/\/+$/, '');
   }

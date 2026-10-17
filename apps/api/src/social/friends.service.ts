@@ -12,6 +12,7 @@ import {
 } from '@gameverse/shared-types';
 import { AppException } from '../common/app.exception.js';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { PushService } from '../push/push.service.js';
 import { orderedPair } from './pair.js';
 import { requireOwnProfile, requireVisibleUser, userNotFound } from './guards.js';
 import { areFriends, isBlockedEitherWay, relationshipsFor, toCard } from './relationships.js';
@@ -21,7 +22,31 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 @Injectable()
 export class FriendsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly push: PushService,
+  ) {}
+
+  /** Tells `to` about something `actorId` did. Best effort and never blocks the request. */
+  private async pushFriendEvent(
+    actorId: string,
+    to: string,
+    kind: 'FRIEND_REQUEST' | 'FRIEND_ACCEPTED',
+  ): Promise<void> {
+    const actor = await this.prisma.userProfile.findUnique({
+      where: { userId: actorId },
+      select: { username: true },
+    });
+    if (!actor) return;
+    this.push.notify(to, {
+      title: 'GameVerse',
+      body:
+        kind === 'FRIEND_REQUEST'
+          ? `${actor.username} sent you a friend request`
+          : `${actor.username} accepted your friend request`,
+      data: { type: kind, userId: actorId },
+    });
+  }
 
   async sendRequest(
     me: string,
@@ -35,7 +60,10 @@ export class FriendsService {
         'You cannot send a friend request to yourself',
       );
     }
-    return runSerializable(this.prisma, async (tx) => {
+    // Set inside the transaction callback (reset on every retry); acted on only after commit.
+    let notify: { to: string; kind: 'FRIEND_REQUEST' | 'FRIEND_ACCEPTED' } | null = null;
+    const result = await runSerializable(this.prisma, async (tx) => {
+      notify = null;
       await requireOwnProfile(tx, me);
       await requireVisibleUser(tx, me, targetId);
 
@@ -50,6 +78,7 @@ export class FriendsService {
         if (existing.senderId === me) return { status: 'PENDING' as const }; // idempotent resend
         // They already asked me: both sides want this, so it becomes a friendship now.
         await this.acceptInTx(tx, existing.id, low, high);
+        notify = { to: existing.senderId, kind: 'FRIEND_ACCEPTED' };
         return { status: 'FRIENDS' as const };
       }
 
@@ -81,8 +110,12 @@ export class FriendsService {
           data: { senderId: me, receiverId: targetId, userLowId: low, userHighId: high },
         });
       }
+      notify = { to: targetId, kind: 'FRIEND_REQUEST' };
       return { status: 'PENDING' as const };
     });
+    const pending = notify as { to: string; kind: 'FRIEND_REQUEST' | 'FRIEND_ACCEPTED' } | null;
+    if (pending) await this.pushFriendEvent(me, pending.to, pending.kind);
+    return result;
   }
 
   private async requireOutgoingCapacity(tx: Tx, me: string): Promise<void> {
@@ -117,7 +150,9 @@ export class FriendsService {
   }
 
   async acceptRequest(me: string, requestId: string): Promise<void> {
+    let senderId: string | null = null;
     await runSerializable(this.prisma, async (tx) => {
+      senderId = null;
       const request = await tx.friendRequest.findUnique({ where: { id: requestId } });
       // 404 (not 403) for someone else's request, so request ids cannot be probed.
       if (!request || request.receiverId !== me || request.status !== 'PENDING') {
@@ -135,7 +170,10 @@ export class FriendsService {
         );
       }
       await this.acceptInTx(tx, request.id, request.userLowId, request.userHighId);
+      senderId = request.senderId;
     });
+    const accepted = senderId as string | null;
+    if (accepted) await this.pushFriendEvent(me, accepted, 'FRIEND_ACCEPTED');
   }
 
   async rejectRequest(me: string, requestId: string, now: Date = new Date()): Promise<void> {

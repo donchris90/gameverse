@@ -50,4 +50,5 @@ export type RealtimeEvent =
   | { type: 'pong' }
   | { type: 'message.new'; conversationId: string; message: MessageView }
   | { type: 'message.read'; conversationId: string; userId: string; lastReadMessageId: string }
+  | { type: 'presence.update'; userId: string; online: boolean }
   | { type: 'error'; code: string };

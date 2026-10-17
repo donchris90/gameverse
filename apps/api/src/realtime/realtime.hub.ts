@@ -11,14 +11,32 @@ export const MAX_SOCKETS_PER_USER = 5;
 @Injectable()
 export class RealtimeHub {
   private readonly sockets = new Map<string, Set<WebSocket>>();
+  private readonly presenceListeners: ((userId: string, online: boolean) => void)[] = [];
+
+  /** Called when a user's first socket connects (true) or their last one goes away (false). */
+  onPresenceChange(listener: (userId: string, online: boolean) => void): void {
+    this.presenceListeners.push(listener);
+  }
+
+  private emitPresence(userId: string, online: boolean): void {
+    for (const listener of this.presenceListeners) {
+      try {
+        listener(userId, online);
+      } catch {
+        // a faulty listener must never break socket handling
+      }
+    }
+  }
 
   register(userId: string, socket: WebSocket): void {
     let set = this.sockets.get(userId);
+    const wasOffline = !set || set.size === 0;
     if (!set) {
       set = new Set();
       this.sockets.set(userId, set);
     }
     set.add(socket);
+    if (wasOffline) this.emitPresence(userId, true);
     // Cap concurrent connections per account: drop the oldest beyond the limit.
     while (set.size > MAX_SOCKETS_PER_USER) {
       const oldest = set.values().next().value;
@@ -31,8 +49,11 @@ export class RealtimeHub {
   unregister(userId: string, socket: WebSocket): void {
     const set = this.sockets.get(userId);
     if (!set) return;
-    set.delete(socket);
-    if (set.size === 0) this.sockets.delete(userId);
+    if (!set.delete(socket)) return;
+    if (set.size === 0) {
+      this.sockets.delete(userId);
+      this.emitPresence(userId, false);
+    }
   }
 
   isOnline(userId: string): boolean {
@@ -60,6 +81,7 @@ export class RealtimeHub {
     if (!set) return;
     for (const socket of set) socket.close(code, reason);
     this.sockets.delete(userId);
+    this.emitPresence(userId, false);
   }
 
   closeAll(): void {
