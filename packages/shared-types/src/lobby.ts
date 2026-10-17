@@ -77,3 +77,10 @@ export interface MatchmakingStatus {
   /** The match found (state 'matched'), or null. */
   match: MatchView | null;
 }
+
+export interface LobbyOverview {
+  /** The room I am hosting (waiting for a guest, or just started), if any. */
+  hosted: RoomView | null;
+  /** Friend invites waiting for my answer. */
+  invites: RoomView[];
+}

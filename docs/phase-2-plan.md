@@ -12,7 +12,7 @@ Approved to start by the owner on 2026-10-17 (Phase 0 and Phase 1 checkpoints ap
 | 2D ✔  | Realtime: match state pushed over the existing `/ws`; actions via REST with `clientActionId` + `expectedVersion`; disconnect grace (30 s), reconnect/resume, forfeit                                               | Reconnect restoring exact state                                        |
 | 2E ✔  | Labelled bots through the same validator, bot matches, "Bot" in UI and data                                                                                                                                        | Never a silent fake human                                              |
 | 2F ✔  | Elo-style rating (seed 1000), XP award (idempotent), per-game leaderboard                                                                                                                                          | Duplicate XP award; rating double-apply                                |
-| 2G    | Mobile: game library, lobby, match screen, result screen, rematch, in-match chat; load-test baseline recorded                                                                                                      | Mobile has never run on a device                                       |
+| 2G ✔  | Mobile: game library, lobby, match screen, result screen, rematch, in-match chat; load-test baseline recorded                                                                                                      | Mobile has never run on a device                                       |
 
 ## Rules taken from `product-spec.md`
 

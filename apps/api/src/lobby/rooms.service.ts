@@ -5,6 +5,7 @@ import {
   ROOM_CODE_ALPHABET,
   ROOM_CODE_LENGTH,
   type GameId,
+  type LobbyOverview,
   type MatchView,
   type RoomView,
 } from '@gameverse/shared-types';
@@ -40,12 +41,7 @@ function generateCode(): string {
   return code;
 }
 
-export interface LobbyOverview {
-  /** The room I am hosting (waiting for a guest, or just started), if any. */
-  hosted: RoomView | null;
-  /** Friend invites waiting for my answer. */
-  invites: RoomView[];
-}
+export type { LobbyOverview };
 
 @Injectable()
 export class RoomsService {

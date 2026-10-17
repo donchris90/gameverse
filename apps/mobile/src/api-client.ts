@@ -4,6 +4,14 @@ import type {
   ConversationView,
   FriendRequestResult,
   FriendRequestView,
+  GameId,
+  BotLevelName,
+  LeaderboardView,
+  LobbyOverview,
+  MatchView,
+  MatchmakingStatus,
+  MyProgress,
+  RoomView,
   MessageView,
   Page,
   PresenceEntry,
@@ -94,4 +102,40 @@ export const accountApi = {
       auth: false,
     }),
   account: () => request<AccountView>('GET', '/v1/me'),
+};
+
+const matchPath = (id: string, action: string) => `/v1/matches/${id}/${action}`;
+
+export const games = {
+  currentMatch: () => request<{ match: MatchView | null }>('GET', '/v1/matches/current'),
+  match: (id: string) => request<MatchView>('GET', `/v1/matches/${id}`),
+  ready: (id: string) => request<MatchView>('POST', matchPath(id, 'ready'), { body: {} }),
+  move: (id: string, cell: number, clientActionId: string, expectedVersion: number) =>
+    request<MatchView>('POST', matchPath(id, 'moves'), {
+      body: { cell, clientActionId, expectedVersion },
+    }),
+  leave: (id: string) => request<MatchView>('POST', matchPath(id, 'leave'), { body: {} }),
+  rematch: (id: string) => request<MatchView>('POST', matchPath(id, 'rematch'), { body: {} }),
+  startBot: (gameId: GameId, level: BotLevelName) =>
+    request<MatchView>('POST', '/v1/matches/bot', { body: { gameId, level } }),
+
+  queue: () => request<MatchmakingStatus>('GET', '/v1/matchmaking'),
+  joinQueue: (gameId: GameId) =>
+    request<MatchmakingStatus>('POST', '/v1/matchmaking/join', { body: { gameId } }),
+  cancelQueue: () => request<MatchmakingStatus>('POST', '/v1/matchmaking/cancel', { body: {} }),
+
+  lobby: () => request<LobbyOverview>('GET', '/v1/rooms'),
+  createRoom: (gameId: GameId) => request<RoomView>('POST', '/v1/rooms', { body: { gameId } }),
+  joinRoom: (code: string) => request<MatchView>('POST', '/v1/rooms/join', { body: { code } }),
+  invite: (friendUserId: string, gameId: GameId) =>
+    request<RoomView>('POST', '/v1/rooms/invite', { body: { gameId, friendUserId } }),
+  acceptInvite: (roomId: string) =>
+    request<MatchView>('POST', `/v1/rooms/${roomId}/accept`, { body: {} }),
+  declineInvite: (roomId: string) =>
+    request<RoomView>('POST', `/v1/rooms/${roomId}/decline`, { body: {} }),
+  closeRoom: (roomId: string) => request<RoomView>('DELETE', `/v1/rooms/${roomId}`),
+
+  progress: () => request<MyProgress>('GET', '/v1/me/progress'),
+  leaderboard: (gameId: GameId, offset = 0) =>
+    request<LeaderboardView>('GET', `/v1/leaderboards/${gameId}${qs({ limit: 20, offset })}`),
 };

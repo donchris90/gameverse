@@ -2,7 +2,7 @@ import { theme } from '@gameverse/design-system';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { Alert, ScrollView, View } from 'react-native';
-import { chat, social } from '../../src/api-client';
+import { chat, games, social } from '../../src/api-client';
 import { ReportPanel } from '../../src/ReportPanel';
 import {
   Avatar,
@@ -56,6 +56,12 @@ export default function UserProfile() {
         pathname: '/chat/[id]',
         params: { id: conversation.id, name: profile.username, userId: profile.userId },
       });
+    });
+
+  const invite = () =>
+    void action.run(async () => {
+      await games.invite(profile.userId, 'tictactoe');
+      Alert.alert('Invite sent', `${profile.username} can accept it from the Play tab.`);
     });
 
   const confirm = (title: string, text: string, confirmLabel: string, onConfirm: () => void) =>
@@ -123,6 +129,9 @@ export default function UserProfile() {
               busy={action.busy}
               onPress={message}
             />
+            {profile.relationship === 'FRIEND' && (
+              <Button label="Invite to play" busy={action.busy} onPress={invite} />
+            )}
             {profile.relationship === 'FRIEND' && (
               <Button
                 label="Remove friend"

@@ -10,3 +10,4 @@ export * from './social.js';
 export * from './matches.js';
 export * from './lobby.js';
 export * from './progress.js';
+export * from './match-ui.js';

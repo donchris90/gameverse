@@ -29,6 +29,8 @@ function Routes() {
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="user/[id]" options={{ title: 'Profile' }} />
         <Stack.Screen name="chat/[id]" options={{ title: 'Chat' }} />
+        <Stack.Screen name="match/[id]" options={{ title: 'Match' }} />
+        <Stack.Screen name="leaderboard" options={{ title: 'Leaderboard' }} />
         <Stack.Screen name="blocked" options={{ title: 'Blocked players' }} />
         <Stack.Screen name="delete-account" options={{ title: 'Delete account' }} />
       </Stack.Protected>

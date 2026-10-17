@@ -18,6 +18,8 @@ export default function TabsLayout() {
       const data = response.notification.request.content.data as Record<string, unknown>;
       if (data['type'] === 'MESSAGE' && typeof data['conversationId'] === 'string') {
         router.push({ pathname: '/chat/[id]', params: { id: data['conversationId'] } });
+      } else if (data['type'] === 'GAME_INVITE') {
+        router.push('/(tabs)/play');
       } else if (data['type'] === 'FRIEND_REQUEST' || data['type'] === 'FRIEND_ACCEPTED') {
         router.push('/(tabs)/friends');
       }
@@ -36,6 +38,7 @@ export default function TabsLayout() {
         sceneStyle: { backgroundColor: theme.colors.background },
       }}
     >
+      <Tabs.Screen name="play" options={{ title: 'Play' }} />
       <Tabs.Screen name="chats" options={{ title: 'Chats' }} />
       <Tabs.Screen name="friends" options={{ title: 'Friends' }} />
       <Tabs.Screen name="settings" options={{ title: 'Settings' }} />

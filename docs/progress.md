@@ -239,3 +239,19 @@ Mutation checks (13): no idempotency guard, private matches counted as ranked, n
 Fixed along the way: two exhaustive game-rules specs timed out at vitest's 5 s default when turbo ran other packages' tests at the same time; the package now has a 60 s test timeout (assertions unchanged). One bot-XP test is pinned to a fixed midday clock, because a real-time clock near UTC midnight made the daily cap look wrong.
 
 Limits: ratings are per game but there is one game; XP and rating values are first-pass numbers in one policy file each; the leaderboard counts with offset paging and is fine for thousands of players but would want a cached rank beyond that; nothing is shown in the apps until 2G.
+
+### Slice 2G: mobile games + load-test baseline (done, 2026-10-18)
+
+New (all mobile code is **unverified on a device**; checks were `tsc --noEmit` and `oxlint -D correctness`): a Play tab (progress strip, resume match, game invites accept/decline, find a player with cancel and a "play a bot instead" offer, practice against easy/medium/hard bot, private room with code, join by code), a match screen (ready, board, turn countdown from the server clock, opponent connection warning, leave, result with rating/XP lines, rematch, chat with the human opponent), a leaderboard screen, "Invite to play" on a friend's profile, and `GAME_INVITE` push taps opening the Play tab. `useMatch` fetches, applies `match.update` pushes by version, refetches on reconnect and when the app returns to the foreground. `LobbyOverview` moved to shared-types.
+
+| Command                                                                                  | Result                                                                         |
+| ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| `npx prettier --check .` then `npx turbo run lint typecheck build test --env-mode=loose` | clean; 22/22 tasks (api 131, shared-types 50, design-system 24, game-rules 41) |
+| `pnpm --filter @gameverse/api test:integration`                                          | 19 files, **455/455 passed**                                                   |
+| `pnpm --filter @gameverse/api smoke:dist`                                                | compiled API is up and ready                                                   |
+
+Load-test baseline (`apps/api/scripts/load-test.mjs`, real HTTP against the compiled API and local PostgreSQL 16 in a small shared sandbox; **not** a production or phone-network figure): 40 simultaneous queue joins, then 20 pairs x 2 full matches over REST.
+Result: 40/40 matches finished, 3585 requests in 25.5 s (about 140 req/s). Latency p50/p95 ms: match.get 13/37, match.move 45/398, match.ready 71/799, room.join 428/1806, queue.join (40 at once) 1414/2028. 19 requests were answered 503 "server busy" and succeeded on retry.
+Found and fixed by this run: the first run gave 500s on queue joins and room joins under that stampede (serializable retries ran out). Backoff now has full jitter and exhaustion returns 503 (decision 71). Earlier runs: 28/40 matches before the fix.
+
+Limits: nothing here has run on a phone; the load test is one burst on one machine and says nothing about Render/Supabase latency; the busy responses show serializable matchmaking contends under bursts, so a real launch should re-measure on the deployed stack. Friend invites are sent from the profile only (no picker in the Play tab).

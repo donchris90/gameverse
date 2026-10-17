@@ -44,7 +44,10 @@ describe('runSerializable', () => {
   it('gives up after a bounded number of attempts', async () => {
     const conflict = Object.assign(new Error('conflict'), { code: 'P2034' });
     const { prisma, calls } = prismaFailing(Array.from({ length: 20 }, () => conflict));
-    await expect(runSerializable(prisma, async () => 'done')).rejects.toBe(conflict);
-    expect(calls()).toBe(8);
+    await expect(runSerializable(prisma, async () => 'done')).rejects.toMatchObject({
+      code: 'SERVICE_UNAVAILABLE',
+      status: 503,
+    });
+    expect(calls()).toBe(10);
   });
 });
