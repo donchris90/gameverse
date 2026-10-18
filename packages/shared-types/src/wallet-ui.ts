@@ -55,3 +55,35 @@ export function coinBanner(wallet: WalletView, now: Date = new Date()): CoinBann
   }
   return { balanceText, accessibilityLabel, claimLabel: null, note };
 }
+
+/** The parts of a match view the entry line needs. */
+export interface EntryMatch {
+  entryFee: number;
+  pot: number;
+  status: string;
+  winnerSeat: number | null;
+  mySeat: number;
+}
+
+/**
+ * One line about the money in a match, or null for a free match. Says plainly what the entry was,
+ * what is at stake, and how it ended for this player. All amounts are bonus coins.
+ */
+export function entrySummary(match: EntryMatch): string | null {
+  if (match.entryFee <= 0) return null;
+  const fee = formatCoins(match.entryFee);
+  const pot = formatCoins(match.pot);
+  switch (match.status) {
+    case 'WAITING':
+    case 'READY':
+    case 'ACTIVE':
+      return `Entry ${fee} bonus coins. Winner takes ${pot}.`;
+    case 'COMPLETED':
+      if (match.winnerSeat === null) return `Draw. Your ${fee} entry coins were returned.`;
+      return match.winnerSeat === match.mySeat
+        ? `You won ${pot} bonus coins.`
+        : `You lost your ${fee} entry coins.`;
+    default:
+      return `Match did not start. Your ${fee} entry coins were returned.`;
+  }
+}

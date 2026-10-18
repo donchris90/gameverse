@@ -1,10 +1,11 @@
 import { theme } from '@gameverse/design-system';
 import type { GameId } from '@gameverse/shared-types';
 import { useState } from 'react';
-import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { coinBanner } from '@gameverse/shared-types';
+import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { coinBanner, ErrorCode, formatCoins } from '@gameverse/shared-types';
 import { games, wallet } from '../../src/api-client';
 import { GAME_INFO, GameArt } from '../../src/GameArt';
+import { ApiError } from '../../src/http';
 import { usePlay } from '../../src/play-state';
 import { Body, Button, ErrorText, Loading, TextField } from '../../src/ui';
 
@@ -13,6 +14,28 @@ const s = theme.spacing;
 
 /** Order the games appear in. A game shows only when the server lists it as playable. */
 const SHELF: GameId[] = ['tictactoe', 'ludo', 'draughts', 'ayo'];
+
+function feeToConfirm(err: unknown): number | null {
+  if (!(err instanceof ApiError) || err.code !== ErrorCode.ENTRY_FEE_CONFIRMATION_REQUIRED) {
+    return null;
+  }
+  const details = err.details as { entryFee?: unknown } | undefined;
+  return typeof details?.entryFee === 'number' ? details.entryFee : null;
+}
+
+function confirmFee(fee: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    Alert.alert(
+      'Entry fee',
+      `This room costs ${formatCoins(fee)} bonus coins to join. The winner takes the pot; a draw or a cancelled match returns your coins.`,
+      [
+        { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+        { text: `Join for ${formatCoins(fee)}`, onPress: () => resolve(true) },
+      ],
+      { cancelable: true, onDismiss: () => resolve(false) },
+    );
+  });
+}
 
 export default function PlayHome() {
   const play = usePlay();
@@ -215,7 +238,17 @@ export default function PlayHome() {
           onPress={() =>
             void act.run(async () => {
               // A full table starts at once; otherwise the player now sits in the room.
-              const joinedRoom = await games.joinRoomResult(code);
+              let joinedRoom;
+              try {
+                joinedRoom = await games.joinRoomResult(code);
+              } catch (err) {
+                // A paid room needs a deliberate yes to its exact fee before any coins move.
+                const fee = feeToConfirm(err);
+                if (fee === null) throw err;
+                const agreed = await confirmFee(fee);
+                if (!agreed) return;
+                joinedRoom = await games.joinRoomResult(code, fee);
+              }
               setCode('');
               if (joinedRoom.match) play.openMatch(joinedRoom.match);
               play.reloadAll();

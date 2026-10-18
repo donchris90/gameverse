@@ -115,6 +115,8 @@ export function toMatchView(
     ludo: ludo === null ? null : toLudoView(ludo),
     draughts: draughts === null ? null : toDraughtsView(draughts),
     ayo: ayo === null ? null : toAyoView(ayo),
+    entryFee: match.entryFee,
+    pot: match.entryFee * match.players.filter((player) => player.userId !== null).length,
     deadline:
       match.deadlineKind === null || match.deadlineAt === null
         ? null

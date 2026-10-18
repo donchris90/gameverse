@@ -53,7 +53,13 @@ export class LobbyController {
     @CurrentUser() user: AuthUser,
     @Body(new ZodValidationPipe(joinQueueSchema)) body: z.output<typeof joinQueueSchema>,
   ): Promise<MatchmakingStatus> {
-    return this.matchmaking.join(user.id, body.gameId, body.players);
+    return this.matchmaking.join(
+      user.id,
+      body.gameId,
+      body.players,
+      new Date(),
+      body.entryFee ?? 0,
+    );
   }
 
   @Post('matchmaking/cancel')
@@ -77,7 +83,7 @@ export class LobbyController {
     @CurrentUser() user: AuthUser,
     @Body(new ZodValidationPipe(createRoomSchema)) body: z.output<typeof createRoomSchema>,
   ): Promise<RoomView> {
-    return this.rooms.create(user.id, body.gameId, body.players);
+    return this.rooms.create(user.id, body.gameId, body.players, new Date(), body.entryFee ?? 0);
   }
 
   @Post('rooms/join')
@@ -86,7 +92,7 @@ export class LobbyController {
     @CurrentUser() user: AuthUser,
     @Body(new ZodValidationPipe(joinRoomSchema)) body: z.output<typeof joinRoomSchema>,
   ): Promise<RoomJoinResult> {
-    return this.rooms.joinByCode(user.id, body.code);
+    return this.rooms.joinByCode(user.id, body.code, new Date(), body.entryFee ?? 0);
   }
 
   @Post('rooms/invite')
@@ -94,7 +100,13 @@ export class LobbyController {
     @CurrentUser() user: AuthUser,
     @Body(new ZodValidationPipe(inviteFriendSchema)) body: z.output<typeof inviteFriendSchema>,
   ): Promise<RoomView> {
-    return this.rooms.invite(user.id, body.friendUserId, body.gameId);
+    return this.rooms.invite(
+      user.id,
+      body.friendUserId,
+      body.gameId,
+      new Date(),
+      body.entryFee ?? 0,
+    );
   }
 
   @Post('rooms/:id/accept')

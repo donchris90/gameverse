@@ -87,6 +87,29 @@ export class WalletService {
     return { applied: true, balance: next };
   }
 
+  /** Current balance (0 when the player has no wallet yet). */
+  async balanceOf(db: Tx | PrismaService, userId: string): Promise<number> {
+    const row = await db.coinWallet.findUnique({ where: { userId }, select: { balance: true } });
+    return row?.balance ?? 0;
+  }
+
+  /**
+   * Refuses unless the player can pay `fee` right now. Gives a brand-new player their starter
+   * grant first, so someone who has never opened the wallet is not wrongly turned away.
+   */
+  async assertCanPay(tx: Tx, userId: string, fee: number): Promise<void> {
+    await this.ensureStarter(tx, userId);
+    const balance = await this.balanceOf(tx, userId);
+    if (balance < fee) {
+      throw new AppException(
+        HttpStatus.CONFLICT,
+        ErrorCode.INSUFFICIENT_COINS,
+        'Not enough bonus coins for this entry fee',
+        { balance, needed: fee },
+      );
+    }
+  }
+
   /** Current earning amounts: the database values, with the shipped defaults for any missing key. */
   async settings(db: Tx | PrismaService = this.prisma): Promise<AdminCoinSettings> {
     const rows = await db.coinSetting.findMany();

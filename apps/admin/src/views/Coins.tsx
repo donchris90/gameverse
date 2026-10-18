@@ -4,7 +4,10 @@ import { api } from '../api.js';
 import { ErrorNote, styles, useLoad } from '../ui.js';
 import { ReasonForm } from './ReasonForm.js';
 
-const LABELS: Record<CoinSettingKey, string> = {
+type AmountKey = Exclude<CoinSettingKey, 'paidEntry'>;
+const AMOUNT_KEYS = COIN_SETTING_KEYS.filter((key): key is AmountKey => key !== 'paidEntry');
+
+const LABELS: Record<AmountKey, string> = {
   starter: 'Welcome bonus (once per player)',
   daily: 'Daily check-in',
   levelUp: 'Reward for each new level',
@@ -21,13 +24,16 @@ export function Coins() {
   const [saving, setSaving] = useState(false);
 
   const changes: Partial<Record<CoinSettingKey, number>> = {};
-  for (const key of COIN_SETTING_KEYS) {
+  for (const key of AMOUNT_KEYS) {
     const raw = draft[key];
     if (raw === undefined || raw.trim() === '' || !data) continue;
     const value = Number(raw);
     if (Number.isInteger(value) && value >= 0 && value <= COIN_AMOUNT_MAX && value !== data[key]) {
       changes[key] = value;
     }
+  }
+  if (data && draft.paidEntry !== undefined && Number(draft.paidEntry) !== data.paidEntry) {
+    changes.paidEntry = Number(draft.paidEntry);
   }
   const changed = Object.keys(changes).length > 0;
 
@@ -43,7 +49,7 @@ export function Coins() {
       {data && (
         <section style={{ ...styles.card, marginBottom: 16 }}>
           <h3>Earning amounts</h3>
-          {COIN_SETTING_KEYS.map((key) => (
+          {AMOUNT_KEYS.map((key) => (
             <label key={key} style={{ display: 'block', marginBottom: 8 }}>
               <span style={styles.muted}>
                 {LABELS[key]} (now {String(data[key])})
@@ -57,6 +63,21 @@ export function Coins() {
               />
             </label>
           ))}
+          <label style={{ display: 'block', marginBottom: 8 }}>
+            <input
+              type="checkbox"
+              checked={
+                draft.paidEntry !== undefined ? draft.paidEntry === '1' : data.paidEntry === 1
+              }
+              onChange={(event) =>
+                setDraft({ ...draft, paidEntry: event.target.checked ? '1' : '0' })
+              }
+            />{' '}
+            <span>
+              Allow matches with an entry fee (now {data.paidEntry === 1 ? 'on' : 'off'}). Turning
+              this off stops new paid matches; matches already started still pay out.
+            </span>
+          </label>
           {changed && (
             <ReasonForm
               label={saving ? 'Saving…' : 'Save changes'}

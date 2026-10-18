@@ -12,6 +12,7 @@ import {
   isOpen,
   leaveLabel,
   rematchState,
+  entrySummary,
   resultLines,
   type MatchView,
 } from '@gameverse/shared-types';
@@ -111,6 +112,7 @@ export function AyoMatch({
   const note = ayoRoundNote(match);
   const endControl = ayoEndControl(match);
   const lines = resultLines(match);
+  const coinLine = entrySummary(match);
   const rematch = rematchState(match);
   const humans = match.players.filter(
     (player) => player.seat !== match.mySeat && player.userId !== null,
@@ -304,6 +306,7 @@ export function AyoMatch({
             </Body>
             {lines?.rating ? <Body>{lines.rating}</Body> : null}
             {lines?.xp ? <Body>{lines.xp}</Body> : null}
+            {coinLine ? <Body>{coinLine}</Body> : null}
           </View>
           {rematch === 'available' ? (
             <Button

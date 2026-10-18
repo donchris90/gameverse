@@ -17,6 +17,8 @@ import { OPEN_STATUSES } from '../matches/matches.constants.js';
 import { BOT_TO_DB, MatchesService } from '../matches/matches.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { PushService } from '../push/push.service.js';
+import { EntryService } from '../matches/entry.service.js';
+import { WalletService } from '../wallet/wallet.service.js';
 import { RealtimeHub } from '../realtime/realtime.hub.js';
 import { areFriends, isBlockedEitherWay } from '../social/relationships.js';
 import { runSerializable, type Tx } from '../social/serializable.js';
@@ -61,6 +63,8 @@ export class RoomsService {
     private readonly matches: MatchesService,
     private readonly hub: RealtimeHub,
     private readonly push: PushService,
+    private readonly wallet: WalletService,
+    private readonly entry: EntryService,
   ) {}
 
   // ----------------------------------------------------------------- reading
@@ -200,6 +204,7 @@ export class RoomsService {
     invitedUserId: string | null,
     now: Date,
     players = 2,
+    entryFee = 0,
   ): Promise<GameRoom> {
     const room = await runSerializable(this.prisma, async (tx) => {
       const game = await tx.game.findUnique({ where: { id: gameId } });
@@ -214,6 +219,10 @@ export class RoomsService {
         );
       }
       await this.assertCanHost(tx, hostId);
+      if (entryFee > 0) {
+        await this.entry.assertAllowed(tx, { fee: entryFee, kind: 'PRIVATE', allHuman: true });
+        await this.wallet.assertCanPay(tx, hostId, entryFee);
+      }
       if (invitedUserId !== null) {
         // Same answer whether the person does not exist, is not a friend, or blocked you.
         const invitee = await tx.user.findUnique({
@@ -244,6 +253,7 @@ export class RoomsService {
           hostId,
           invitedUserId,
           seats: players,
+          entryFee,
           expiresAt: new Date(now.getTime() + (invitedUserId ? INVITE_TTL_MS : ROOM_TTL_MS)),
           createdAt: now,
         },
@@ -258,8 +268,9 @@ export class RoomsService {
     gameId: GameId,
     players = 2,
     now: Date = new Date(),
+    entryFee = 0,
   ): Promise<RoomView> {
-    const room = await this.open(hostId, gameId, null, now, players);
+    const room = await this.open(hostId, gameId, null, now, players, entryFee);
     const [view] = await this.viewsFor([room], hostId, now);
     return view as RoomView;
   }
@@ -269,6 +280,7 @@ export class RoomsService {
     friendUserId: string,
     gameId: GameId,
     now: Date = new Date(),
+    entryFee = 0,
   ): Promise<RoomView> {
     if (friendUserId === hostId) {
       throw new AppException(
@@ -277,7 +289,7 @@ export class RoomsService {
         'You cannot invite yourself',
       );
     }
-    const room = await this.open(hostId, gameId, friendUserId, now);
+    const room = await this.open(hostId, gameId, friendUserId, now, 2, entryFee);
     const host = await this.prisma.userProfile.findUnique({
       where: { userId: hostId },
       select: { username: true },
@@ -343,6 +355,7 @@ export class RoomsService {
         kind: botSeats > 0 ? 'BOT' : room.invitedUserId === null ? 'PRIVATE' : 'FRIEND',
         seats,
         openingSeat: randomInt(0, seats.length) as 0 | 1 | 2 | 3,
+        entryFee: room.entryFee,
       },
       tx,
     );
@@ -361,6 +374,7 @@ export class RoomsService {
     userId: string,
     find: (tx: Tx) => Promise<GameRoom | null>,
     now: Date,
+    confirmedFee: number | null,
   ): Promise<{ matchId: string | null; roomId: string }> {
     return runSerializable(this.prisma, async (tx) => {
       const room = await find(tx);
@@ -387,6 +401,19 @@ export class RoomsService {
       if (members.some((member) => member.userId === userId)) {
         return { matchId: null, roomId: room.id };
       }
+      if (room.entryFee > 0) {
+        // Joining a paid room by code must be a deliberate yes to this exact fee. Accepting an
+        // invitation passes null: the invitation itself showed the fee.
+        if (confirmedFee !== null && confirmedFee !== room.entryFee) {
+          throw new AppException(
+            HttpStatus.CONFLICT,
+            ErrorCode.ENTRY_FEE_CONFIRMATION_REQUIRED,
+            'This room has an entry fee. Confirm it to join.',
+            { entryFee: room.entryFee },
+          );
+        }
+        await this.wallet.assertCanPay(tx, userId, room.entryFee);
+      }
       await this.assertNotInOpenRoom(tx, userId, now);
       for (const other of [room.hostId, ...members.map((member) => member.userId)]) {
         if (await isBlockedEitherWay(tx, userId, other)) throw roomNotFound();
@@ -402,8 +429,9 @@ export class RoomsService {
     userId: string,
     find: (tx: Tx) => Promise<GameRoom | null>,
     now: Date,
+    confirmedFee: number | null,
   ): Promise<RoomJoinResult> {
-    const { matchId, roomId } = await this.enter(userId, find, now);
+    const { matchId, roomId } = await this.enter(userId, find, now, confirmedFee);
     if (matchId !== null) await this.matches.publish(matchId);
     await this.announce(roomId);
     const room = await this.prisma.gameRoom.findUniqueOrThrow({ where: { id: roomId } });
@@ -414,13 +442,19 @@ export class RoomsService {
     };
   }
 
-  async joinByCode(userId: string, code: string, now: Date = new Date()): Promise<RoomJoinResult> {
+  async joinByCode(
+    userId: string,
+    code: string,
+    now: Date = new Date(),
+    confirmedFee = 0,
+  ): Promise<RoomJoinResult> {
     this.checkNotGuessing(userId, now);
     try {
       return await this.startAndShow(
         userId,
         (tx) => tx.gameRoom.findUnique({ where: { code } }),
         now,
+        confirmedFee,
       );
     } catch (error) {
       if (error instanceof AppException && error.getStatus() === HttpStatus.NOT_FOUND) {
@@ -438,6 +472,7 @@ export class RoomsService {
         return room !== null && room.invitedUserId === userId ? room : null;
       },
       now,
+      null,
     );
     if (result.match === null) throw roomNotFound();
     return result.match;

@@ -416,3 +416,15 @@ One full integration run had a single `concurrency-matches` failure with the err
   - Mutation checks (each broken on purpose, tests failed as they should, code restored): row lock removed (concurrent debits test failed), idempotency check ignored (8 tests failed), level reward removed (level-up test failed).
 - Not verified: the Play-tab balance card and daily claim on a phone; the admin Bonus coins tab in a browser; the migration on Render (applied automatically by the redeploy).
 - Next exact action: slice 8B (entry fees and pots in the match flow) after the owner picks the Ayo rules (plan in `docs/phase-8-plan.md`), or sooner if the owner approves 8B on its own.
+
+## Slice 8B: entry fees and pots (built, verified on the server side; not seen on a phone)
+
+- Server: `EntryService` (`apps/api/src/matches/entry.service.ts`) takes fees in `createMatch`'s transaction (users locked in id order, key `entry:{matchId}:{userId}`) and settles in `commit` when a match reaches COMPLETED, CANCELLED, EXPIRED or ABANDONED (pot key `pot:{matchId}`, refund key `refund:{matchId}:{userId}`). Migration `20261023000000_entry_fees` adds `entryFee` to matches, rooms and queue entries and the `paidEntry` setting. Quick match, private rooms and invites carry the fee; rematch repeats it. `MatchView` has `entryFee` and `pot`.
+- Mobile: entry picker on the game screen, fee shown while searching or waiting in a room, confirm dialog for paid rooms joined by code, coin line on every match screen. Admin: "Allow matches with an entry fee" switch on the Bonus coins tab. Direct friend invites from a profile are still free in the app (the server supports a fee; no UI yet).
+- Verified, real output:
+  - `PRISMA_SCHEMA_ENGINE_BINARY=/bin/true pnpm exec turbo run lint typecheck build test --env-mode=loose --continue`: Tasks: 22 successful, 22 total.
+  - `pnpm exec vitest run --config ./vitest.config.e2e.ts` in `apps/api`: Test Files 32 passed, Tests 630 passed (614 before + 16 in `test/entry-fees.e2e-spec.ts`: charge, single pot payout, draw refund, leave-before-start refund, expiry refund, forfeit pays the stayer, short balance rolls everything back, two racing matches never overdraw, bot matches free, unlisted fee and kill switch, rematch, quick match equal/unequal/short balance, room confirmation, no bots in paid rooms; total coins in wallets always equals the ledger).
+  - `scripts/smoke-dist.sh`: "compiled API is up and ready". `npx prettier --check .` clean.
+  - Mutation checks (broken on purpose, tests failed, code restored): pot key made non-idempotent (1 failed), refund amount wrong (3 failed), kill switch disabled (1 failed).
+- Not verified: all new mobile screens on a phone, the admin switch in a browser, the migration on Render (applied by the redeploy), a stuck-match case where a player's coins are removed by an admin after a search starts (the pairing step skips players who cannot pay).
+- Next exact action: slice 8C (Tic-tac-toe port), or owner device check of 8A and 8B first.

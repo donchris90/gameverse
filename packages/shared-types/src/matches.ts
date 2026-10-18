@@ -196,6 +196,10 @@ export interface MatchView {
   draughts: DraughtsView | null;
   /** Ayo state; null until the match is active and for other games. */
   ayo: AyoView | null;
+  /** Bonus coins each player paid to play; 0 for a free match. */
+  entryFee: number;
+  /** Coins the winner takes: the entry fees of everyone in the match. 0 for a free match. */
+  pot: number;
   deadline: { kind: MatchDeadlineKind; at: string } | null;
   serverTime: string;
   /** Why the match stopped early or finished: score, forfeit, timeout, left, expired. */

@@ -498,6 +498,10 @@ model GameMatch {
   /// Winning seat; null for a drawn series or a match that never produced a result.
   winnerSeat Int?    @db.SmallInt
 
+  /// Bonus coins each human paid to play, taken when the match was created; 0 for a free match.
+  /// The winner gets all the fees, a draw or a match that never started returns them.
+  entryFee Int @default(0)
+
   /// Which seat opens game 1 (alternates from one rematch to the next).
   openingSeat          Int     @default(0) @db.SmallInt
   /// Bit 1 = seat 0 asked for a rematch, bit 2 = seat 1 did.
@@ -582,6 +586,8 @@ model GameRoom {
   invitedUserId String?    @db.Uuid
   /// Players the game starts with when the room is full: 2 for tic-tac-toe, 2 to 4 for Ludo.
   seats         Int        @default(2)
+  /// Bonus coins every player pays when the match starts; 0 for a free room.
+  entryFee      Int        @default(0)
   status        RoomStatus @default(OPEN)
   expiresAt     DateTime   @db.Timestamptz(3)
   matchId       String?    @unique @db.Uuid
@@ -623,6 +629,8 @@ model MatchQueueEntry {
   rating   Int
   /// How many players the searcher wants in the match (2 for tic-tac-toe, 2 to 4 for Ludo).
   seats    Int      @default(2)
+  /// Bonus coins the searcher is willing to pay; only equal fees are paired.
+  entryFee Int      @default(0)
   joinedAt DateTime @default(now()) @db.Timestamptz(3)
 
   user User @relation("QueueUser", fields: [userId], references: [id], onDelete: Cascade)

@@ -21,7 +21,7 @@ export const COIN_REASONS = [
 export type CoinReason = (typeof COIN_REASONS)[number];
 
 /** Amounts the owner can change from the admin. */
-export const COIN_SETTING_KEYS = ['starter', 'daily', 'levelUp'] as const;
+export const COIN_SETTING_KEYS = ['starter', 'daily', 'levelUp', 'paidEntry'] as const;
 export type CoinSettingKey = (typeof COIN_SETTING_KEYS)[number];
 
 /** Defaults used until the owner changes them (decision #112). The database holds the live values. */
@@ -29,7 +29,23 @@ export const COIN_SETTING_DEFAULTS: Record<CoinSettingKey, number> = {
   starter: 500,
   daily: 50,
   levelUp: 100,
+  /** 1 = players may start matches with an entry fee, 0 = every new match is free. */
+  paidEntry: 1,
 };
+
+/**
+ * Entry fees a match can have, in bonus coins (0 is a free match). Fixed choices keep the lobby
+ * simple and stop odd amounts from splitting players into queues of one.
+ */
+export const ENTRY_FEE_TIERS = [0, 50, 100, 250, 500] as const;
+export type EntryFee = (typeof ENTRY_FEE_TIERS)[number];
+export const entryFeeSchema = z.union([
+  z.literal(0),
+  z.literal(50),
+  z.literal(100),
+  z.literal(250),
+  z.literal(500),
+]);
 
 /** No setting or single grant may exceed this, so a typo cannot hand out a fortune. */
 export const COIN_AMOUNT_MAX = 1_000_000;
@@ -95,12 +111,17 @@ export const adminCoinSettingsSchema = z
     starter: coinAmount.or(z.literal(0)),
     daily: coinAmount.or(z.literal(0)),
     levelUp: coinAmount.or(z.literal(0)),
+    paidEntry: z.union([z.literal(0), z.literal(1)]),
     reason: adminReason,
   })
-  .partial({ starter: true, daily: true, levelUp: true })
+  .partial({ starter: true, daily: true, levelUp: true, paidEntry: true })
   .refine(
-    (v) => v.starter !== undefined || v.daily !== undefined || v.levelUp !== undefined,
-    'Change at least one amount',
+    (v) =>
+      v.starter !== undefined ||
+      v.daily !== undefined ||
+      v.levelUp !== undefined ||
+      v.paidEntry !== undefined,
+    'Change at least one setting',
   );
 
 export const coinUserParamSchema = userIdSchema;

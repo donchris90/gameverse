@@ -3,6 +3,7 @@ import {
   canMove,
   canPressReady,
   displayName,
+  entrySummary,
   isOpen,
   myMark,
   opponentOf,
@@ -113,6 +114,7 @@ export default function MatchScreen() {
   const opponent = opponentOf(match);
   const mark = myMark(match);
   const lines = resultLines(match);
+  const coinLine = entrySummary(match);
   const rematch = rematchState(match);
 
   const onTap = (cell: number) => {
@@ -154,6 +156,7 @@ export default function MatchScreen() {
       <View accessibilityLiveRegion="polite">
         <Text style={[styles.headline, { color: TONE_COLOR[status.tone] }]}>{status.headline}</Text>
         {status.detail ? <Body muted>{status.detail}</Body> : null}
+        {coinLine ? <Body>{coinLine}</Body> : null}
       </View>
 
       <Board match={match} onTap={onTap} />

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { GAME_IDS, type GameId, type MatchView } from './matches.js';
+import { entryFeeSchema } from './wallet.js';
 
 export const ROOM_CODE_LENGTH = 6;
 /** No 0/O or 1/I so a code read aloud or typed from a screenshot is not misread. */
@@ -26,6 +27,8 @@ export interface RoomView {
   invited: RoomPartyView | null;
   /** Players the game starts with when the room is full (2 for tic-tac-toe, 2 to 4 for Ludo). */
   seats: number;
+  /** Bonus coins every player pays to play; 0 for a free room. */
+  entryFee: number;
   /** Guests who joined with the code, in the order they joined. The host is not listed. */
   members: RoomPartyView[];
   expiresAt: string;
@@ -40,12 +43,16 @@ export const MAX_ROOM_SEATS = 4;
 const seatsField = z.number().int().min(MIN_ROOM_SEATS).max(MAX_ROOM_SEATS);
 
 export const createRoomSchema = z
-  .object({ gameId: z.enum(GAME_IDS), players: seatsField.optional() })
+  .object({
+    gameId: z.enum(GAME_IDS),
+    players: seatsField.optional(),
+    entryFee: entryFeeSchema.optional(),
+  })
   .strict();
 export type CreateRoomRequest = z.input<typeof createRoomSchema>;
 
 export const inviteFriendSchema = z
-  .object({ gameId: z.enum(GAME_IDS), friendUserId: z.uuid() })
+  .object({ gameId: z.enum(GAME_IDS), friendUserId: z.uuid(), entryFee: entryFeeSchema.optional() })
   .strict();
 export type InviteFriendRequest = z.input<typeof inviteFriendSchema>;
 
@@ -57,6 +64,8 @@ export const joinRoomSchema = z
       .trim()
       .transform((value) => value.toUpperCase())
       .pipe(z.string().regex(ROOM_CODE_PATTERN, 'Enter the 6-character room code')),
+    /** The entry fee the player has agreed to pay. Required when the room has one. */
+    entryFee: entryFeeSchema.optional(),
   })
   .strict();
 export type JoinRoomRequest = z.input<typeof joinRoomSchema>;
@@ -76,7 +85,11 @@ export interface RoomJoinResult {
 }
 
 export const joinQueueSchema = z
-  .object({ gameId: z.enum(GAME_IDS), players: seatsField.optional() })
+  .object({
+    gameId: z.enum(GAME_IDS),
+    players: seatsField.optional(),
+    entryFee: entryFeeSchema.optional(),
+  })
   .strict();
 export type JoinQueueRequest = z.input<typeof joinQueueSchema>;
 
@@ -93,6 +106,8 @@ export interface MatchmakingStatus {
     gameId: GameId;
     /** How many players this search is for. */
     players: number;
+    /** Bonus coins each player pays; 0 for a free match. */
+    entryFee: number;
     joinedAt: string;
     waitedMs: number;
     /** Rating difference currently accepted; widens the longer the search runs. */

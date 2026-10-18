@@ -1,8 +1,16 @@
 import { theme } from '@gameverse/design-system';
-import { BOT_LEVELS, QUEUE_BOT_OFFER_AFTER_MS, type GameId } from '@gameverse/shared-types';
+import {
+  BOT_LEVELS,
+  QUEUE_BOT_OFFER_AFTER_MS,
+  formatCoins,
+  type EntryFee,
+  type GameId,
+} from '@gameverse/shared-types';
 import { Stack, useLocalSearchParams } from 'expo-router';
+import { useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { games } from '../../src/api-client';
+import { EntryPicker } from '../../src/EntryPicker';
 import { GAME_INFO, GameArt } from '../../src/GameArt';
 import { LudoCard } from '../../src/ludo/LudoCard';
 import { usePlay } from '../../src/play-state';
@@ -26,6 +34,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 export default function GameScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const play = usePlay();
+  const [entryFee, setEntryFee] = useState<EntryFee>(0);
   const info = id && id in GAME_INFO ? GAME_INFO[id as GameId] : null;
 
   if (!info) return <Empty text="That game does not exist." />;
@@ -72,8 +81,20 @@ export default function GameScreen() {
           </Section>
         ) : null}
 
+        {!resume && !searchingHere && !room && !joined ? (
+          <Section title="Entry fee">
+            <EntryPicker
+              value={entryFee}
+              onChange={setEntryFee}
+              balance={play.coins.data?.balance ?? null}
+              disabled={act.busy}
+            />
+          </Section>
+        ) : null}
+
         {info.id === 'ludo' ? (
           <LudoCard
+            entryFee={entryFee}
             busy={act.busy}
             blocked={play.occupied}
             searching={search}
@@ -90,6 +111,12 @@ export default function GameScreen() {
               {searchingHere ? (
                 <>
                   <Body>Looking for an opponent…</Body>
+                  {searchingHere.entryFee > 0 ? (
+                    <Body muted>
+                      Entry {formatCoins(searchingHere.entryFee)} bonus coins, taken when a match is
+                      found.
+                    </Body>
+                  ) : null}
                   {searchingHere.waitedMs >= QUEUE_BOT_OFFER_AFTER_MS || searchingHere.botOffer ? (
                     <Body muted>Taking a while. You can play a computer player instead.</Body>
                   ) : null}
@@ -119,7 +146,9 @@ export default function GameScreen() {
                     label="Find a player"
                     busy={act.busy}
                     disabled={play.occupied}
-                    onPress={() => void play.run(() => games.joinQueue(info.id))}
+                    onPress={() =>
+                      void play.run(() => games.joinQueue(info.id, undefined, entryFee))
+                    }
                   />
                 </>
               )}
@@ -154,6 +183,12 @@ export default function GameScreen() {
                     {room.invited ? `Waiting for ${room.invited.username}` : 'Share this code:'}
                   </Body>
                   {room.code ? <Text style={styles.code}>{room.code}</Text> : null}
+                  {room.entryFee > 0 ? (
+                    <Body muted>
+                      Entry {formatCoins(room.entryFee)} bonus coins each, taken when the match
+                      starts.
+                    </Body>
+                  ) : null}
                   <Button
                     label="Close room"
                     tone="secondary"
@@ -178,7 +213,9 @@ export default function GameScreen() {
                     label="Create a private room"
                     busy={act.busy}
                     disabled={play.occupied}
-                    onPress={() => void play.run(() => games.createRoom(info.id))}
+                    onPress={() =>
+                      void play.run(() => games.createRoom(info.id, undefined, entryFee))
+                    }
                   />
                 </>
               )}

@@ -4,9 +4,11 @@ import { ErrorCode, type GameId, type MatchmakingStatus } from '@gameverse/share
 import { AppException } from '../common/app.exception.js';
 import type { MatchQueueEntry } from '../generated/prisma/client.js';
 import { OPEN_STATUSES } from '../matches/matches.constants.js';
+import { EntryService } from '../matches/entry.service.js';
 import { MatchesService } from '../matches/matches.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { runSerializable, type Tx } from '../social/serializable.js';
+import { WalletService } from '../wallet/wallet.service.js';
 import {
   DEFAULT_RATING,
   QUEUE_BOT_OFFER_AFTER_MS,
@@ -25,6 +27,8 @@ export class MatchmakingService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly matches: MatchesService,
+    private readonly wallet: WalletService,
+    private readonly entry: EntryService,
   ) {}
 
   /** Skill rating at the moment the search starts (1000 for a player with no rated games). */
@@ -44,6 +48,7 @@ export class MatchmakingService {
         searching: {
           gameId: entry.gameId as GameId,
           players: entry.seats,
+          entryFee: entry.entryFee,
           joinedAt: entry.joinedAt.toISOString(),
           waitedMs,
           ratingBand: ratingBand(waitedMs),
@@ -68,6 +73,7 @@ export class MatchmakingService {
     gameId: GameId,
     players = 2,
     now: Date = new Date(),
+    entryFee = 0,
   ): Promise<MatchmakingStatus> {
     const matchId = await runSerializable(this.prisma, async (tx) => {
       const game = await tx.game.findUnique({ where: { id: gameId } });
@@ -94,7 +100,11 @@ export class MatchmakingService {
       }
       const existing = await tx.matchQueueEntry.findUnique({ where: { userId } });
       if (existing !== null) {
-        if (existing.gameId !== gameId || existing.seats !== players) {
+        if (
+          existing.gameId !== gameId ||
+          existing.seats !== players ||
+          existing.entryFee !== entryFee
+        ) {
           throw new AppException(
             HttpStatus.CONFLICT,
             ErrorCode.ALREADY_QUEUED,
@@ -135,11 +145,18 @@ export class MatchmakingService {
           'Leave your room before searching for a match',
         );
       }
+      if (entryFee > 0) {
+        // A paid search needs the right match mode and enough coins up front, so nobody waits
+        // in a queue they can never leave with a match.
+        await this.entry.assertAllowed(tx, { fee: entryFee, kind: 'QUICK', allHuman: true });
+        await this.wallet.assertCanPay(tx, userId, entryFee);
+      }
       const entry = await tx.matchQueueEntry.create({
         data: {
           userId,
           gameId,
           seats: players,
+          entryFee,
           rating: await this.ratingOf(tx, userId, gameId),
           joinedAt: now,
         },
@@ -167,6 +184,7 @@ export class MatchmakingService {
       where: {
         gameId: entry.gameId,
         seats: entry.seats,
+        entryFee: entry.entryFee,
         userId: { not: entry.userId },
         joinedAt: { gt: new Date(now.getTime() - QUEUE_TTL_MS) },
       },
@@ -197,7 +215,21 @@ export class MatchmakingService {
       select: { userId: true },
     });
     const inMatch = new Set(busy.map((row) => row.userId));
-    const eligible = others.filter((other) => !inMatch.has(other.userId));
+    let eligible = others.filter((other) => !inMatch.has(other.userId));
+    if (entry.entryFee > 0) {
+      // Coins may have been spent since the search began. Only pair players who can pay now,
+      // so creating the match (which takes the fees) cannot fail halfway.
+      const funded = await tx.coinWallet.findMany({
+        where: {
+          userId: { in: [entry.userId, ...eligible.map((o) => o.userId)] },
+          balance: { gte: entry.entryFee },
+        },
+        select: { userId: true },
+      });
+      const canPay = new Set(funded.map((row) => row.userId));
+      if (!canPay.has(entry.userId)) return null;
+      eligible = eligible.filter((other) => canPay.has(other.userId));
+    }
 
     const group = pickGroup(waiting(entry), eligible.map(waiting), entry.seats, now, conflicts);
     if (group === null) return null;
@@ -215,6 +247,7 @@ export class MatchmakingService {
         kind: 'QUICK',
         seats: seated.map((member) => ({ userId: member.userId })),
         openingSeat: randomInt(0, seated.length) as 0 | 1 | 2 | 3,
+        entryFee: entry.entryFee,
       },
       tx,
     );

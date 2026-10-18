@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { coinBanner, coinReasonLabel, formatCoins } from './wallet-ui.js';
+import { coinBanner, coinReasonLabel, entrySummary, formatCoins } from './wallet-ui.js';
 import { COIN_REASONS, type WalletView } from './wallet.js';
 
 const wallet = (over: Partial<WalletView> = {}): WalletView => ({
@@ -39,5 +39,33 @@ describe('coin banner', () => {
     for (const reason of COIN_REASONS) expect(coinReasonLabel(reason)).not.toBe('Bonus coins');
     expect(coinReasonLabel('SOMETHING_NEW')).toBe('Bonus coins');
     expect(formatCoins(1234567)).toBe('1,234,567');
+  });
+});
+
+describe('entry summary', () => {
+  const base = { entryFee: 100, pot: 200, status: 'ACTIVE', winnerSeat: null, mySeat: 0 };
+  it('says nothing for a free match', () => {
+    expect(entrySummary({ ...base, entryFee: 0, pot: 0 })).toBeNull();
+  });
+  it('states the entry and the pot while the match is open', () => {
+    expect(entrySummary(base)).toBe('Entry 100 bonus coins. Winner takes 200.');
+  });
+  it('says how a finished match ended for this player', () => {
+    expect(entrySummary({ ...base, status: 'COMPLETED', winnerSeat: 0 })).toBe(
+      'You won 200 bonus coins.',
+    );
+    expect(entrySummary({ ...base, status: 'COMPLETED', winnerSeat: 1 })).toBe(
+      'You lost your 100 entry coins.',
+    );
+    expect(entrySummary({ ...base, status: 'COMPLETED', winnerSeat: null })).toBe(
+      'Draw. Your 100 entry coins were returned.',
+    );
+  });
+  it('says the coins came back when the match never started', () => {
+    for (const status of ['CANCELLED', 'EXPIRED', 'ABANDONED']) {
+      expect(entrySummary({ ...base, status })).toBe(
+        'Match did not start. Your 100 entry coins were returned.',
+      );
+    }
   });
 });

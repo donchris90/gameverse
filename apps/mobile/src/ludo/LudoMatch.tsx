@@ -9,6 +9,7 @@ import {
   ludoStatus,
   placingRows,
   rematchState,
+  entrySummary,
   resultLines,
   seatSummaries,
   shownDie,
@@ -71,6 +72,7 @@ export function LudoMatch({
   const seats = seatSummaries(match);
   const ticker = ludoEventTexts(match).slice(-3);
   const lines = resultLines(match);
+  const coinLine = entrySummary(match);
   const rematch = rematchState(match);
   const humans = match.players.filter(
     (player) => player.seat !== match.mySeat && player.userId !== null,
@@ -251,6 +253,7 @@ export function LudoMatch({
           ))}
           {lines?.rating ? <Body>{lines.rating}</Body> : null}
           {lines?.xp ? <Body>{lines.xp}</Body> : null}
+          {coinLine ? <Body>{coinLine}</Body> : null}
         </View>
       ) : null}
 

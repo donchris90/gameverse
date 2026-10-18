@@ -12,6 +12,7 @@ import {
   leaveLabel,
   pieceName,
   rematchState,
+  entrySummary,
   resultLines,
   squareName,
   type MatchView,
@@ -117,6 +118,7 @@ export function DraughtsMatch({
   const lastSquares = new Set(game?.last ? [game.last.from, ...game.last.path] : []);
   const counts = game ? draughtsCounts(game) : [0, 0];
   const lines = resultLines(match);
+  const coinLine = entrySummary(match);
   const rematch = rematchState(match);
   const humans = match.players.filter(
     (player) => player.seat !== match.mySeat && player.userId !== null,
@@ -307,6 +309,7 @@ export function DraughtsMatch({
           <View style={styles.result} accessibilityLabel="Result">
             {lines?.rating ? <Body>{lines.rating}</Body> : null}
             {lines?.xp ? <Body>{lines.xp}</Body> : null}
+            {coinLine ? <Body>{coinLine}</Body> : null}
           </View>
           {rematch === 'available' ? (
             <Button

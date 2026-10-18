@@ -4,7 +4,9 @@ import {
   LUDO_TABLE_SIZES,
   QUEUE_BOT_OFFER_AFTER_MS,
   roomSummary,
+  formatCoins,
   type BotLevelName,
+  type EntryFee,
   type MatchView,
   type MatchmakingStatus,
   type RoomView,
@@ -25,6 +27,7 @@ type Search = NonNullable<MatchmakingStatus['searching']>;
  * private table for friends. Shown only when the server lists Ludo as playable.
  */
 export function LudoCard({
+  entryFee,
   busy,
   blocked,
   searching,
@@ -35,6 +38,8 @@ export function LudoCard({
   run,
   start,
 }: {
+  /** Bonus coins each player pays for a match against people. Bots are always free. */
+  entryFee: EntryFee;
   busy: boolean;
   /** True while another match, search or room already occupies the player. */
   blocked: boolean;
@@ -84,6 +89,11 @@ export function LudoCard({
       {searchingLudo ? (
         <>
           <Body>{`Looking for ${String(searchingLudo.players)} players…`}</Body>
+          {searchingLudo.entryFee > 0 ? (
+            <Body muted>
+              {`Entry ${formatCoins(searchingLudo.entryFee)} bonus coins, taken when the table is full. First home takes the pot.`}
+            </Body>
+          ) : null}
           {searchingLudo.waitedMs >= QUEUE_BOT_OFFER_AFTER_MS || searchingLudo.botOffer ? (
             <Body muted>Taking a while. You can play with computer players instead.</Body>
           ) : null}
@@ -112,7 +122,7 @@ export function LudoCard({
             label={`Find ${String(size)} players`}
             busy={busy}
             disabled={blocked || otherSearch}
-            onPress={() => void run(() => games.joinQueue('ludo', size))}
+            onPress={() => void run(() => games.joinQueue('ludo', size, entryFee))}
           />
 
           <Body muted>Practice against bots (labelled Bot)</Body>
@@ -141,7 +151,7 @@ export function LudoCard({
             tone="secondary"
             busy={busy}
             disabled={blocked || otherSearch}
-            onPress={() => void run(() => games.createRoom('ludo', size))}
+            onPress={() => void run(() => games.createRoom('ludo', size, entryFee))}
           />
         </>
       ) : null}

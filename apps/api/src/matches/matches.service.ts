@@ -33,6 +33,7 @@ import {
   SWEEP_BATCH,
 } from './matches.constants.js';
 import { invalidState, notFound, staleVersion } from './match-errors.js';
+import { EntryService, ENDED_STATUSES } from './entry.service.js';
 import { toMatchView, type MatchRecord, type ProfileLookup } from './match.view.js';
 import type { AnySeat, Change, EventDraft, Outcome } from './match-changes.js';
 
@@ -45,6 +46,8 @@ export interface CreateMatchInput {
   seats: readonly SeatSpec[];
   /** Which seat opens game 1. Rematches pass the alternated seat. */
   openingSeat?: AnySeat;
+  /** Bonus coins every human pays; 0 or missing for a free match. Never with bots. */
+  entryFee?: number;
 }
 
 const BOT_TO_DB: Record<'easy' | 'medium' | 'hard', BotLevel> = {
@@ -62,6 +65,7 @@ export class MatchesService implements OnModuleInit {
     private readonly prisma: PrismaService,
     private readonly hub: RealtimeHub,
     private readonly results: ResultsService,
+    private readonly entry: EntryService,
   ) {}
 
   onModuleInit(): void {
@@ -194,10 +198,15 @@ export class MatchesService implements OnModuleInit {
         data: event.data ?? undefined,
       })),
     });
-    // Completing a match and recording its result are one atomic step.
-    if (change.patch.status === 'COMPLETED') {
+    // Completing a match and recording its result are one atomic step. So is settling the entry
+    // fees: the pot is paid, or the fees returned, in the transaction that ends the match.
+    const status = change.patch.status;
+    if (typeof status === 'string' && ENDED_STATUSES.has(status)) {
       const finished = await this.load(tx, match.id);
-      if (finished) await this.results.record(tx, finished);
+      if (finished) {
+        if (status === 'COMPLETED') await this.results.record(tx, finished);
+        await this.entry.settle(tx, finished);
+      }
     }
   }
 
@@ -287,10 +296,18 @@ export class MatchesService implements OnModuleInit {
         }
       }
 
+      const fee = input.entryFee ?? 0;
+      await this.entry.assertAllowed(tx, {
+        fee,
+        kind: input.kind,
+        allHuman: humans.length === input.seats.length,
+      });
+
       const created = await tx.gameMatch.create({
         data: {
           gameId: input.gameId,
           kind: input.kind,
+          entryFee: fee,
           status: 'READY',
           version: 1,
           openingSeat: input.openingSeat ?? 0,
@@ -313,6 +330,8 @@ export class MatchesService implements OnModuleInit {
           data: { kind: input.kind, openingSeat: input.openingSeat ?? 0 },
         },
       });
+      // Fees leave the wallets in this same transaction: no fee, no match.
+      await this.entry.charge(tx, created.id, humans, fee);
       return created.id;
     };
     const matchId = existingTx ? await run(existingTx) : await runSerializable(this.prisma, run);
@@ -510,6 +529,7 @@ export class MatchesService implements OnModuleInit {
             kind: current.kind,
             seats,
             openingSeat,
+            entryFee: current.entryFee,
           },
           tx,
         );

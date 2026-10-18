@@ -14,6 +14,7 @@ import type {
   RoomJoinResult,
   RoomView,
   VoiceSessionView,
+  EntryFee,
   WalletView,
   VoiceTokenView,
   MessageView,
@@ -161,16 +162,22 @@ export const games = {
     request<MatchView>('POST', '/v1/matches/bot', { body: { gameId, level, players } }),
 
   queue: () => request<MatchmakingStatus>('GET', '/v1/matchmaking'),
-  joinQueue: (gameId: GameId, players?: number) =>
-    request<MatchmakingStatus>('POST', '/v1/matchmaking/join', { body: { gameId, players } }),
+  joinQueue: (gameId: GameId, players?: number, entryFee?: EntryFee) =>
+    request<MatchmakingStatus>('POST', '/v1/matchmaking/join', {
+      body: { gameId, players, ...(entryFee ? { entryFee } : {}) },
+    }),
   cancelQueue: () => request<MatchmakingStatus>('POST', '/v1/matchmaking/cancel', { body: {} }),
 
   lobby: () => request<LobbyOverview>('GET', '/v1/rooms'),
-  createRoom: (gameId: GameId, players?: number) =>
-    request<RoomView>('POST', '/v1/rooms', { body: { gameId, players } }),
+  createRoom: (gameId: GameId, players?: number, entryFee?: EntryFee) =>
+    request<RoomView>('POST', '/v1/rooms', {
+      body: { gameId, players, ...(entryFee ? { entryFee } : {}) },
+    }),
   /** Joins with a code. `match` is null while the room is still waiting for more players. */
-  joinRoomResult: (code: string) =>
-    request<RoomJoinResult>('POST', '/v1/rooms/join', { body: { code } }),
+  joinRoomResult: (code: string, entryFee?: number) =>
+    request<RoomJoinResult>('POST', '/v1/rooms/join', {
+      body: { code, ...(entryFee ? { entryFee } : {}) },
+    }),
   /** Two-player games always start on join; used by the tic-tac-toe screens. */
   joinRoom: async (code: string): Promise<MatchView> => {
     const result = await request<RoomJoinResult>('POST', '/v1/rooms/join', { body: { code } });
