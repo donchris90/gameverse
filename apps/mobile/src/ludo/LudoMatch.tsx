@@ -118,7 +118,51 @@ export function LudoMatch({
       router.push({ pathname: '/chat/[id]', params: { id: conversation.id } });
     });
 
-  if (!ludo) return null;
+  // Before everyone is ready there is no board yet: show who we are waiting for and the Ready
+  // button. (Returning nothing here left a blank screen with no way to start.)
+  if (!ludo) {
+    return (
+      <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
+        <Title>{match.kind === 'BOT' ? 'Practice match' : 'Ludo'}</Title>
+        <View accessibilityLiveRegion="polite">
+          <Text style={[styles.headline, { color: TONE_COLOR[status.tone] }]}>
+            {status.headline}
+          </Text>
+          {status.detail ? <Body muted>{status.detail}</Body> : null}
+        </View>
+        <ErrorText error={act.error} />
+        {canPressReady(match) ? (
+          <Button
+            label="Ready"
+            busy={act.busy}
+            onPress={() => void act.run(async () => apply(await games.ready(match.id)))}
+          />
+        ) : null}
+        {match.status === 'EXPIRED' ||
+        match.status === 'CANCELLED' ||
+        match.status === 'ABANDONED' ? (
+          <Button
+            label="Back to games"
+            tone="secondary"
+            onPress={() => router.replace('/(tabs)/play')}
+          />
+        ) : null}
+        {isOpen(match) ? (
+          <Button
+            label={leaveLabel(match)}
+            tone="danger"
+            busy={act.busy}
+            onPress={() =>
+              void act.run(async () => {
+                apply(await games.leave(match.id));
+                router.replace('/(tabs)/play');
+              })
+            }
+          />
+        ) : null}
+      </ScrollView>
+    );
+  }
 
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>

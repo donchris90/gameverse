@@ -390,3 +390,9 @@ One full integration run had a single `concurrency-matches` failure with the err
 - Found while testing: a relay can go round in a circle forever. Fix: a relay that returns to a position it was already in ends the turn (decision #109, in the rules doc; the owner has not seen this case). Random play also showed that matches between two random players can run for hundreds of turns because a round moves only a few seeds; there is no round cap. Both are flagged to the owner.
 - **Unverified:** the board screen on a phone, pit size for touch, the replay animation, bot strength by feel, and whether the rules match how people play Ayo locally. Checklist in `docs/ayo-verification.md`. Ayo stays off until the owner enables it from the admin Games tab.
 - Next exact action: owner device check of Draughts and Ayo, then the Whot rules doc for approval (slice 6D).
+
+## Fix: blank Ludo match screen (found by the owner on a device)
+
+- Cause: a match starts in the READY stage with no game state. `LudoMatch` returned `null` when the Ludo state was missing, so the screen was blank and the Ready button never appeared. Draughts and Ayo already handled this stage.
+- Fix: `LudoMatch` now shows the status line, the Ready button and Leave while the board does not exist yet.
+- Checked: `pnpm exec turbo run lint typecheck --filter=@gameverse/mobile` passed. The screen itself is NOT yet seen on a device (unverified); there is no component test harness for mobile screens.
