@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { levelForXp } from '@gameverse/shared-types';
 import { ayoOf } from '../matches/ayo.driver.js';
 import { draughtsOf } from '../matches/draughts.driver.js';
 import { ludoOf } from '../matches/ludo-driver.js';
@@ -13,6 +14,7 @@ import {
 import type { GameMatch, GameMatchPlayer } from '../generated/prisma/client.js';
 import type { Tx } from '../social/serializable.js';
 import { orderedPair } from '../social/pair.js';
+import { WalletService } from '../wallet/wallet.service.js';
 import {
   BOT_XP_MATCHES_PER_DAY,
   DAY_MS,
@@ -53,6 +55,8 @@ function finalScores(match: Completed): ((seat: Seat) => 0 | 0.5 | 1) | null {
 
 @Injectable()
 export class ResultsService {
+  constructor(private readonly wallet: WalletService) {}
+
   async record(tx: Tx, match: Completed): Promise<void> {
     if (match.status !== 'COMPLETED') return;
     if (match.gameId === 'ludo') return this.recordLudo(tx, match);
@@ -173,13 +177,7 @@ export class ResultsService {
         });
       }
       if (match.kind !== 'BOT') await this.addStatistics(tx, row.userId, match.gameId, row.score);
-      if (row.xp > 0) {
-        await tx.playerExperience.upsert({
-          where: { userId: row.userId },
-          create: { userId: row.userId, xp: row.xp },
-          update: { xp: { increment: row.xp } },
-        });
-      }
+      if (row.xp > 0) await this.addExperience(tx, row.userId, row.xp);
     }
   }
 
@@ -300,14 +298,18 @@ export class ResultsService {
       if (match.kind !== 'BOT') {
         await this.addStatistics(tx, row.userId, match.gameId, row.score === 1 ? 1 : 0);
       }
-      if (row.xp > 0) {
-        await tx.playerExperience.upsert({
-          where: { userId: row.userId },
-          create: { userId: row.userId, xp: row.xp },
-          update: { xp: { increment: row.xp } },
-        });
-      }
+      if (row.xp > 0) await this.addExperience(tx, row.userId, row.xp);
     }
+  }
+
+  /** Adds XP and pays the bonus-coin reward for every level it reaches, in the same transaction. */
+  private async addExperience(tx: Tx, userId: string, xp: number): Promise<void> {
+    const row = await tx.playerExperience.upsert({
+      where: { userId },
+      create: { userId, xp },
+      update: { xp: { increment: xp } },
+    });
+    await this.wallet.rewardLevels(tx, userId, levelForXp(row.xp - xp), levelForXp(row.xp));
   }
 
   private async addStatistics(

@@ -1,4 +1,5 @@
 import type {
+  AdminCoinSettings,
   AdminGameView,
   AdminUserDetail,
   AdminUserSummary,
@@ -8,6 +9,7 @@ import type {
   ReportStatus,
   ReportView,
   UserRole,
+  WalletView,
 } from '@gameverse/shared-types';
 
 const BASE_URL = (import.meta.env.VITE_API_URL ?? 'http://localhost:3000').replace(/\/+$/, '');
@@ -184,6 +186,12 @@ export const api = {
   games: () => call<AdminGameView[]>('GET', '/v1/admin/games'),
   setGameEnabled: (id: string, enabled: boolean, reason: string) =>
     call<AdminGameView>('PATCH', `/v1/admin/games/${id}`, { enabled, reason }),
+  coinSettings: () => call<AdminCoinSettings>('GET', '/v1/admin/coin-settings'),
+  setCoinSettings: (changes: Partial<AdminCoinSettings>, reason: string) =>
+    call<AdminCoinSettings>('PATCH', '/v1/admin/coin-settings', { ...changes, reason }),
+  userCoins: (id: string) => call<WalletView>('GET', `/v1/admin/users/${id}/coins`),
+  adjustCoins: (id: string, amount: number, reason: string, idempotencyKey: string) =>
+    call<WalletView>('POST', `/v1/admin/users/${id}/coins`, { amount, reason, idempotencyKey }),
   audit: (cursor?: string, targetId?: string) =>
     call<Page<AuditLogView>>('GET', `/v1/admin/audit-logs${query({ cursor, targetId })}`),
 };

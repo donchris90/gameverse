@@ -11,12 +11,16 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import {
+  type AdminCoinSettings,
   type AdminGameView,
   type AdminUserDetail,
   type AdminUserSummary,
   type AuditLogView,
   type Page,
   type ReportView,
+  type WalletView,
+  adminCoinGrantSchema,
+  adminCoinSettingsSchema,
   adminUserSearchSchema,
   auditQuerySchema,
   changeRoleSchema,
@@ -38,6 +42,7 @@ import { ModerationService } from './moderation.service.js';
 import { ReportsService } from './reports.service.js';
 import { Roles } from './roles.decorator.js';
 import { RolesGuard } from './roles.guard.js';
+import { WalletService } from '../wallet/wallet.service.js';
 
 const idParam = (name: string) => Param(name, new ZodValidationPipe(userIdSchema));
 type ActionBody = z.output<typeof moderationActionSchema>;
@@ -52,6 +57,7 @@ export class AdminController {
     private readonly reports: ReportsService,
     private readonly audit: AuditService,
     private readonly gamesAdmin: GamesAdminService,
+    private readonly wallet: WalletService,
   ) {}
 
   @Get('users')
@@ -157,5 +163,39 @@ export class AdminController {
     body: z.output<typeof setGameEnabledSchema>,
   ): Promise<AdminGameView> {
     return this.gamesAdmin.setEnabled(actor, gameId, body.enabled, body.reason);
+  }
+
+  @Get('coin-settings')
+  @Roles('ADMIN')
+  coinSettings(): Promise<AdminCoinSettings> {
+    return this.wallet.settings();
+  }
+
+  @Patch('coin-settings')
+  @Roles('ADMIN')
+  updateCoinSettings(
+    @CurrentUser() actor: AuthUser,
+    @Body(new ZodValidationPipe(adminCoinSettingsSchema))
+    body: z.output<typeof adminCoinSettingsSchema>,
+  ): Promise<AdminCoinSettings> {
+    return this.wallet.updateSettings(actor, body);
+  }
+
+  @Get('users/:userId/coins')
+  @Roles('ADMIN')
+  userCoins(@idParam('userId') userId: string): Promise<WalletView> {
+    return this.wallet.view(userId);
+  }
+
+  @Post('users/:userId/coins')
+  @Roles('ADMIN')
+  @HttpCode(HttpStatus.OK)
+  adjustCoins(
+    @CurrentUser() actor: AuthUser,
+    @idParam('userId') userId: string,
+    @Body(new ZodValidationPipe(adminCoinGrantSchema))
+    body: z.output<typeof adminCoinGrantSchema>,
+  ): Promise<WalletView> {
+    return this.wallet.adminAdjust(actor, userId, body);
   }
 }

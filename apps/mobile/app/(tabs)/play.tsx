@@ -2,7 +2,8 @@ import { theme } from '@gameverse/design-system';
 import type { GameId } from '@gameverse/shared-types';
 import { useState } from 'react';
 import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { games } from '../../src/api-client';
+import { coinBanner } from '@gameverse/shared-types';
+import { games, wallet } from '../../src/api-client';
 import { GAME_INFO, GameArt } from '../../src/GameArt';
 import { usePlay } from '../../src/play-state';
 import { Body, Button, ErrorText, Loading, TextField } from '../../src/ui';
@@ -15,7 +16,7 @@ const SHELF: GameId[] = ['tictactoe', 'ludo', 'draughts', 'ayo'];
 
 export default function PlayHome() {
   const play = usePlay();
-  const { router, act, progress, resume, invites, search, listedGames } = play;
+  const { router, act, progress, coins, resume, invites, search, listedGames } = play;
   const [code, setCode] = useState('');
 
   if (play.current.loading && !play.current.data) return <Loading />;
@@ -24,6 +25,7 @@ export default function PlayHome() {
   const stats = new Map(progress.data?.games.map((g) => [g.gameId as string, g]) ?? []);
   const level = progress.data;
   const fill = level ? Math.min(1, level.xp / Math.max(1, level.nextLevelXp)) : 0;
+  const banner = coins.data ? coinBanner(coins.data) : null;
 
   return (
     <ScrollView
@@ -55,6 +57,32 @@ export default function PlayHome() {
           </View>
         ) : null}
       </View>
+
+      {banner ? (
+        <View style={styles.coinCard}>
+          <View accessible accessibilityLabel={banner.accessibilityLabel} style={styles.coinRow}>
+            <View style={styles.coinDot}>
+              <Text style={styles.coinDotText}>C</Text>
+            </View>
+            <View style={styles.flex}>
+              <Text style={styles.coinBalance}>{banner.balanceText} bonus coins</Text>
+              <Body muted>{banner.note}</Body>
+            </View>
+          </View>
+          {banner.claimLabel ? (
+            <Button
+              label={banner.claimLabel}
+              busy={act.busy}
+              onPress={() =>
+                void act.run(async () => {
+                  await wallet.claimDaily();
+                  await coins.reload();
+                })
+              }
+            />
+          ) : null}
+        </View>
+      ) : null}
 
       <ErrorText error={act.error} />
 
@@ -222,6 +250,26 @@ const styles = StyleSheet.create({
   },
   trackFill: { height: 8, backgroundColor: c.success, borderRadius: theme.radii.pill },
   xp: { color: c.textSecondary, fontSize: 12 },
+  coinCard: {
+    backgroundColor: c.surface,
+    borderColor: c.border,
+    borderWidth: 1,
+    borderRadius: theme.radii.lg,
+    padding: s.lg,
+    gap: s.md,
+    marginBottom: s.md,
+  },
+  coinRow: { flexDirection: 'row', alignItems: 'center', gap: s.md },
+  coinDot: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: c.warning,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  coinDotText: { color: c.textOnAccent, fontWeight: '800', fontSize: 16 },
+  coinBalance: { color: c.textPrimary, fontSize: 18, fontWeight: '700' },
   banner: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -14,6 +14,7 @@ import type {
   RoomJoinResult,
   RoomView,
   VoiceSessionView,
+  WalletView,
   VoiceTokenView,
   MessageView,
   Page,
@@ -21,6 +22,7 @@ import type {
   ProfileView,
   ReportReason,
   SettingsView,
+  DailyClaimView,
   UserCard,
   UserProfileView,
   UsernameCheckResult,
@@ -190,6 +192,12 @@ export const games = {
   progress: () => request<MyProgress>('GET', '/v1/me/progress'),
   leaderboard: (gameId: GameId, offset = 0) =>
     request<LeaderboardView>('GET', `/v1/leaderboards/${gameId}${qs({ limit: 20, offset })}`),
+};
+
+/** The player's bonus coins: free play credit. Read the balance and claim the daily check-in. */
+export const wallet = {
+  get: () => request<WalletView>('GET', '/v1/wallet'),
+  claimDaily: () => request<DailyClaimView>('POST', '/v1/wallet/daily', { body: {} }),
 };
 
 export const voiceApi = (matchId: string) => ({

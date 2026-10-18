@@ -1,7 +1,7 @@
 import type { BotLevelName, MatchView, MatchmakingStatus, RoomView } from '@gameverse/shared-types';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { games } from './api-client';
+import { games, wallet } from './api-client';
 import { realtime } from './realtime';
 import { useAction, useLoad } from './ui';
 
@@ -20,17 +20,20 @@ export function usePlay() {
   const queue = useLoad(useCallback(() => games.queue(), []));
   const lobby = useLoad(useCallback(() => games.lobby(), []));
   const progress = useLoad(useCallback(() => games.progress(), []));
+  const coins = useLoad(useCallback(() => wallet.get(), []));
 
   const { reload: reloadCurrent } = current;
   const { reload: reloadQueue } = queue;
   const { reload: reloadLobby } = lobby;
   const { reload: reloadProgress } = progress;
+  const { reload: reloadCoins } = coins;
   const reloadAll = useCallback(() => {
     void reloadCurrent();
     void reloadQueue();
     void reloadLobby();
     void reloadProgress();
-  }, [reloadCurrent, reloadQueue, reloadLobby, reloadProgress]);
+    void reloadCoins();
+  }, [reloadCurrent, reloadQueue, reloadLobby, reloadProgress, reloadCoins]);
 
   useFocusEffect(reloadAll);
 
@@ -98,6 +101,7 @@ export function usePlay() {
     setLevel,
     current,
     progress,
+    coins,
     lobby,
     reloadAll,
     openMatch,

@@ -23,6 +23,7 @@ import { VoiceModule } from './voice/voice.module.js';
 import { MatchesModule } from './matches/matches.module.js';
 import { ProgressModule } from './progress/progress.module.js';
 import { LobbyModule } from './lobby/lobby.module.js';
+import { WalletModule } from './wallet/wallet.module.js';
 
 const REQUEST_ID_PATTERN = /^[\w-]{8,64}$/;
 
@@ -84,6 +85,7 @@ export class AppModule {
         VoiceModule,
         MatchesModule,
         ProgressModule,
+        WalletModule,
         LobbyModule,
         HealthModule,
       ],

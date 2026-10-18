@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module.js';
+import { WalletModule } from '../wallet/wallet.module.js';
 import { AdminController } from './admin.controller.js';
 import { GamesAdminService } from './games-admin.service.js';
 import { AuditService } from './audit.service.js';
@@ -9,7 +10,7 @@ import { ReportsService } from './reports.service.js';
 import { RolesGuard } from './roles.guard.js';
 
 @Module({
-  imports: [AuthModule],
+  imports: [AuthModule, WalletModule],
   controllers: [ReportsController, AdminController],
   providers: [ReportsService, ModerationService, AuditService, GamesAdminService, RolesGuard],
   exports: [ModerationService, ReportsService, AuditService],

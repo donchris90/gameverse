@@ -403,3 +403,16 @@ One full integration run had a single `concurrency-matches` failure with the err
 - `docs/phase-8-plan.md` written: slices 8A (ledger), 8B (entry and pot), 8C Tic-tac-toe, 8D Ludo, 8E Ayo, 8F cross-cutting. Nothing built; no RRYDA code copied. The RRYDA backup was unpacked outside the repo and only read.
 - Waiting for the owner: approve the plan, and choose which Ayo rules to use (table in the plan). Whot (slice 6D) is paused behind this phase.
 - Next exact action: owner approval, then 8A.
+
+## Slice 8A: bonus-coin wallet (built, verified on the server side; not seen on a phone)
+
+- What exists: migration `20261022000000_bonus_coins` (`coin_wallets`, append-only `coin_ledger` with a unique idempotency key, `coin_settings`; database CHECKs keep a balance and a ledger balance at zero or above and a ledger delta non-zero), `WalletService.move` (row lock, idempotent, refuses overdraft), starter grant (500), daily check-in (50, one per UTC day), level-up reward (100 per level, paid in the same transaction as the XP), `GET /v1/wallet`, `POST /v1/wallet/daily`, admin `GET/PATCH /v1/admin/coin-settings`, `GET/POST /v1/admin/users/:id/coins` (admin role only, reason + idempotency key, audited). Mobile: balance card and daily claim on the Play tab. Admin web: new "Bonus coins" tab. There is no route to send, sell or withdraw coins (a test asserts the obvious ones return 404).
+- Amounts are defaults I chose (decision #112), editable from the admin. The daily day is the UTC day (resets at 01:00 Lagos time); say if you want Lagos midnight instead.
+- Nothing charges an entry fee yet: that is slice 8B. Coins cannot be spent until then.
+- Verified, with real output:
+  - `pnpm exec turbo run lint typecheck build test --env-mode=loose` (with `PRISMA_SCHEMA_ENGINE_BINARY=/bin/true`): 22 successful, 22 total. Shared-types 174 + 9 new tests, API unit tests 145.
+  - `pnpm exec vitest run --config ./vitest.config.e2e.ts` in `apps/api`: Test Files 31 passed, Tests 614 passed (595 before + 19 new in `test/wallet.e2e-spec.ts`).
+  - `npx prettier --check .`: all files use Prettier code style.
+  - Mutation checks (each broken on purpose, tests failed as they should, code restored): row lock removed (concurrent debits test failed), idempotency check ignored (8 tests failed), level reward removed (level-up test failed).
+- Not verified: the Play-tab balance card and daily claim on a phone; the admin Bonus coins tab in a browser; the migration on Render (applied automatically by the redeploy).
+- Next exact action: slice 8B (entry fees and pots in the match flow) after the owner picks the Ayo rules (plan in `docs/phase-8-plan.md`), or sooner if the owner approves 8B on its own.

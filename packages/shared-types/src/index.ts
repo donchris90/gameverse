@@ -20,3 +20,5 @@ export * from './voice-ui.js';
 export * from './voice-controller.js';
 export * from './draughts-ui.js';
 export * from './ayo-ui.js';
+export * from './wallet.js';
+export * from './wallet-ui.js';

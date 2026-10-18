@@ -88,6 +88,8 @@ model User {
   ratings         PlayerRating[]     @relation("PlayerRatingUser")
   statistics      PlayerStatistics[] @relation("PlayerStatisticsUser")
   experience      PlayerExperience?  @relation("PlayerExperienceUser")
+  coinWallet      CoinWallet?        @relation("CoinWalletUser")
+  coinLedger      CoinLedger[]       @relation("CoinLedgerUser")
   hostedRooms     GameRoom[]         @relation("RoomHost")
   roomInvites     GameRoom[]         @relation("RoomInvitee")
   queueEntry      MatchQueueEntry?   @relation("QueueUser")
@@ -737,4 +739,43 @@ model VoiceSession {
   @@index([matchId, leftAt])
   @@index([userId, joinedAt])
   @@map("voice_sessions")
+}
+
+/// Bonus coins: free play credit used for match entry fees and pots. Never bought, withdrawn,
+/// sent to another player or exchanged for anything (decision #110). The balance is never
+/// negative (database CHECK) and changes only together with a CoinLedger row.
+model CoinWallet {
+  userId    String   @id @db.Uuid
+  balance   Int      @default(0)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(3)
+
+  user User @relation("CoinWalletUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("coin_wallets")
+}
+
+/// Append-only. `idempotencyKey` is unique, so one real-world event can pay or charge only once.
+model CoinLedger {
+  id             String   @id @default(uuid(7)) @db.Uuid
+  userId         String   @db.Uuid
+  delta          Int
+  balanceAfter   Int
+  reason         String
+  reference      String?
+  idempotencyKey String   @unique
+  createdAt      DateTime @default(now()) @db.Timestamptz(3)
+
+  user User @relation("CoinLedgerUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("coin_ledger")
+}
+
+/// Admin-editable amounts: starter, daily, levelUp (entry tiers arrive in slice 8B).
+model CoinSetting {
+  key       String   @id
+  value     Int
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(3)
+
+  @@map("coin_settings")
 }
