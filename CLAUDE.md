@@ -38,4 +38,6 @@ Read this at the start of every session. Product details live in `docs/product-s
 
 ## Out of scope for MVP (do not build)
 
-Live streaming, virtual gifting, cash wagering or prizes, paid-entry matches, seasonal passes, rewarded ads, custom voice transport, voice recording, multi-instance WebSocket scaling, multiple languages beyond English (keep i18n-ready only).
+Live streaming, virtual gifting, cash wagering or prizes, purchasable or withdrawable currency, spectator bets, seasonal passes, rewarded ads, custom voice transport, voice recording, multi-instance WebSocket scaling, multiple languages beyond English (keep i18n-ready only).
+
+Allowed since 2026-10-18 (decision #110): **bonus coins**, a free, non-purchasable, non-withdrawable, non-transferable in-app currency used for match entry fees and pots. Nothing else about money changes.

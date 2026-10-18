@@ -396,3 +396,10 @@ One full integration run had a single `concurrency-matches` failure with the err
 - Cause: a match starts in the READY stage with no game state. `LudoMatch` returned `null` when the Ludo state was missing, so the screen was blank and the Ready button never appeared. Draughts and Ayo already handled this stage.
 - Fix: `LudoMatch` now shows the status line, the Ready button and Leave while the board does not exist yet.
 - Checked: `pnpm exec turbo run lint typecheck --filter=@gameverse/mobile` passed. The screen itself is NOT yet seen on a device (unverified); there is no component test harness for mobile screens.
+
+## Phase 8 planned: bonus coins and the RRYDA game port (plan only)
+
+- Owner decisions 2026-10-18 recorded as #110 to #113; `CLAUDE.md` scope updated (bonus coins allowed, nothing purchasable or withdrawable).
+- `docs/phase-8-plan.md` written: slices 8A (ledger), 8B (entry and pot), 8C Tic-tac-toe, 8D Ludo, 8E Ayo, 8F cross-cutting. Nothing built; no RRYDA code copied. The RRYDA backup was unpacked outside the repo and only read.
+- Waiting for the owner: approve the plan, and choose which Ayo rules to use (table in the plan). Whot (slice 6D) is paused behind this phase.
+- Next exact action: owner approval, then 8A.
