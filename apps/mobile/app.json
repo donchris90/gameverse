@@ -6,7 +6,12 @@
     "version": "0.1.0",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
-    "plugins": ["expo-router", "expo-dev-client", "./plugins/with-voice-foreground-service"],
+    "plugins": [
+      "expo-router",
+      "expo-dev-client",
+      "./plugins/with-voice-foreground-service",
+      "./plugins/with-work-manager-keep"
+    ],
     "experiments": {
       "typedRoutes": true
     },
