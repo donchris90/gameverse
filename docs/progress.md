@@ -322,3 +322,11 @@ Not verified: any of it running on a device or emulator (Reanimated/worklets set
 `pnpm` reports a peer warning (`react-dom 19.3.1` wants `react ^19.3.1`, the app pins `react 19.3.0`); it arrived with the new packages and is not fixed.
 
 Next: 4E, a full 4-player integration test (done in 4B), a load check with Ludo, enabling the game, and the Phase 4 checkpoint report.
+
+## Phase 4E: load check and checkpoint (2026-10-18)
+
+`scripts/load-test.mjs` gained `--game ludo` (tables of 4, random play, paced like a person). Local run, 40 players / 10 tables: run 1 finished 9/10 (one `room.join` stayed 503 after 4 script retries), run 2 finished 10/10; 40/40 simultaneous 4-player searches matched both times. Roll p50/p95 50/318 ms, token move 45/256 ms. Full numbers and caveats in `docs/phase-4-checkpoint.md`.
+
+Verified: `pnpm --filter @gameverse/api test:integration` 22 files, 525/525 (after the load runs, with Ludo switched back off in the test database).
+
+**Phase 4 checkpoint report:** `docs/phase-4-checkpoint.md`. Ludo stays disabled until the device checks; Phase 5 needs the owner's approval.
