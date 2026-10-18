@@ -2,7 +2,15 @@ import { theme } from '@gameverse/design-system';
 import { Tabs, useRouter } from 'expo-router';
 import * as Notifications from 'expo-notifications';
 import { useEffect } from 'react';
+import type { ColorValue } from 'react-native';
 import { registerForPush } from '../../src/push';
+import { TabIcon, type TabIconName } from '../../src/TabIcons';
+
+const icon =
+  (name: TabIconName) =>
+  ({ color, size, focused }: { color: ColorValue; size: number; focused: boolean }) => (
+    <TabIcon name={name} color={color} size={size} focused={focused} />
+  );
 
 export default function TabsLayout() {
   const router = useRouter();
@@ -38,10 +46,10 @@ export default function TabsLayout() {
         sceneStyle: { backgroundColor: theme.colors.background },
       }}
     >
-      <Tabs.Screen name="play" options={{ title: 'Play' }} />
-      <Tabs.Screen name="chats" options={{ title: 'Chats' }} />
-      <Tabs.Screen name="friends" options={{ title: 'Friends' }} />
-      <Tabs.Screen name="settings" options={{ title: 'Settings' }} />
+      <Tabs.Screen name="play" options={{ title: 'Play', tabBarIcon: icon('play') }} />
+      <Tabs.Screen name="chats" options={{ title: 'Chats', tabBarIcon: icon('chats') }} />
+      <Tabs.Screen name="friends" options={{ title: 'Friends', tabBarIcon: icon('friends') }} />
+      <Tabs.Screen name="settings" options={{ title: 'Settings', tabBarIcon: icon('settings') }} />
     </Tabs>
   );
 }

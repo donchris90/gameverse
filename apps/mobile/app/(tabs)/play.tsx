@@ -20,7 +20,7 @@ export default function PlayHome() {
 
   if (play.current.loading && !play.current.data) return <Loading />;
 
-  const shelf = SHELF.filter((id) => listedGames.has(id) || id === 'tictactoe');
+  const shelf = SHELF;
   const stats = new Map(progress.data?.games.map((g) => [g.gameId as string, g]) ?? []);
   const level = progress.data;
   const fill = level ? Math.min(1, level.xp / Math.max(1, level.nextLevelXp)) : 0;
@@ -112,13 +112,25 @@ export default function PlayHome() {
       {shelf.map((id) => {
         const info = GAME_INFO[id];
         const record = stats.get(id);
+        // A game the server has not switched on is shown as "Coming soon", never as playable.
+        const soon = !(listedGames.has(id) || id === 'tictactoe');
         return (
           <Pressable
             key={id}
             accessibilityRole="button"
-            accessibilityLabel={`${info.name}. ${info.tagline} ${info.tags.join(', ')}.`}
+            accessibilityLabel={
+              soon
+                ? `${info.name}. Coming soon.`
+                : `${info.name}. ${info.tagline} ${info.tags.join(', ')}.`
+            }
+            accessibilityState={{ disabled: soon }}
+            disabled={soon}
             onPress={() => router.push({ pathname: '/game/[id]', params: { id } })}
-            style={({ pressed }) => [styles.gameCard, pressed && styles.gameCardPressed]}
+            style={({ pressed }) => [
+              styles.gameCard,
+              soon && styles.gameCardSoon,
+              pressed && styles.gameCardPressed,
+            ]}
           >
             <View style={[styles.banner2, { backgroundColor: info.banner }]}>
               <GameArt gameId={id} size={104} />
@@ -126,7 +138,13 @@ export default function PlayHome() {
             <View style={styles.gameBody}>
               <View style={styles.gameTitleRow}>
                 <Text style={styles.gameName}>{info.name}</Text>
-                <Text style={styles.chevron}>›</Text>
+                {soon ? (
+                  <View style={styles.soonBadge}>
+                    <Text style={styles.soonText}>Coming soon</Text>
+                  </View>
+                ) : (
+                  <Text style={styles.chevron}>›</Text>
+                )}
               </View>
               <Body muted>{info.tagline}</Body>
               <View style={styles.tags}>
@@ -225,6 +243,14 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     marginBottom: s.lg,
   },
+  gameCardSoon: { opacity: 0.6 },
+  soonBadge: {
+    backgroundColor: c.surfaceRaised,
+    borderRadius: theme.radii.pill,
+    paddingHorizontal: s.md,
+    paddingVertical: s.xs,
+  },
+  soonText: { color: c.textSecondary, fontSize: 12, fontWeight: '700' },
   gameCardPressed: { opacity: 0.85, transform: [{ scale: 0.99 }] },
   banner2: { height: 150, alignItems: 'center', justifyContent: 'center' },
   gameBody: { padding: s.lg, gap: s.sm },
