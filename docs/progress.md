@@ -1,6 +1,8 @@
 # Progress
 
-**Current status (2026-10-17): Phase 1 code is complete (slices 1A-1F plus closing work) and Phase 0 code is complete. Both are waiting on owner inputs listed under "What cannot be finished without the owner". Phase 2 was approved to start by the owner on 2026-10-17; the plan is in `docs/phase-2-plan.md`.** Details in the Phase 1 section below.
+**Current status (2026-10-18): Phases 0-5 are built and committed; Phase 5 (MVP hardening and gate) is at its checkpoint, waiting for owner review. The MVP gate is NOT fully green: see `docs/phase-5-checkpoint.md` for the item-by-item table and the register of unverified/blocked items.**
+
+_Older status line:_ (2026-10-17) Phase 1 code is complete (slices 1A-1F plus closing work) and Phase 0 code is complete. Both are waiting on owner inputs listed under "What cannot be finished without the owner". Phase 2 was approved to start by the owner on 2026-10-17; the plan is in `docs/phase-2-plan.md`.** Details in the Phase 1 section below.
 
 ## Last verified checkpoint: Phase 0 — API foundation (2026-10-17)
 
@@ -330,3 +332,22 @@ Next: 4E, a full 4-player integration test (done in 4B), a load check with Ludo,
 Verified: `pnpm --filter @gameverse/api test:integration` 22 files, 525/525 (after the load runs, with Ludo switched back off in the test database).
 
 **Phase 4 checkpoint report:** `docs/phase-4-checkpoint.md`. Ludo stays disabled until the device checks; Phase 5 needs the owner's approval.
+
+## Phase 5: MVP hardening and gate (2026-10-18)
+
+Slices 5A-5H are committed. Verified results (all run this session):
+
+| Command                                                                                                 | Result                                                                           |
+| ------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `npx prettier --check .`                                                                                | clean                                                                            |
+| `PRISMA_SCHEMA_ENGINE_BINARY=/bin/true pnpm exec turbo run lint typecheck build test --env-mode=loose`  | 22/22 tasks; unit shared-types 146, design-system 28, api 140, game-rules 130    |
+| `PRISMA_SCHEMA_ENGINE_BINARY=/bin/true pnpm exec vitest run --config ./vitest.config.e2e.ts` (apps/api) | 27 files, 558/558                                                                |
+| `apps/api/scripts/smoke-dist.sh`                                                                        | compiled API up and ready                                                        |
+| `scripts/db-rehearsal.sh`                                                                               | 13 migrations clean, dump/restore identical per table                            |
+| `scripts/ws-load.sh`, `ws-idle.sh`                                                                      | ceiling about 60-75 pairs on a shared 2-vCPU box; 6,000 idle sockets, 0 failures |
+
+One full integration run had a single `concurrency-matches` failure with the error not captured; 14 isolated runs and 2 later full runs passed. Cause unknown.
+
+**Unverified/blocked register and the 12-item gate table: `docs/phase-5-checkpoint.md`.** Not verified: all mobile code on devices, Maestro runs, voice (Agora), Apple/Google sign-in with real tokens, `prisma migrate deploy`, hosted backup restore, real email, first CI run. Not implemented: Apple token revocation on deletion.
+
+**Next exact action:** owner reviews the checkpoint, then supplies Agora keys/devices, EAS builds and store accounts so the blocked items can be run.
