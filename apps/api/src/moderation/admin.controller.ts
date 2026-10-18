@@ -11,6 +11,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import {
+  type AdminGameView,
   type AdminUserDetail,
   type AdminUserSummary,
   type AuditLogView,
@@ -20,8 +21,10 @@ import {
   auditQuerySchema,
   changeRoleSchema,
   dismissReportSchema,
+  gameIdParamSchema,
   moderationActionSchema,
   reportsQuerySchema,
+  setGameEnabledSchema,
   userIdSchema,
 } from '@gameverse/shared-types';
 import type { z } from 'zod';
@@ -30,6 +33,7 @@ import { CurrentUser } from '../auth/current-user.decorator.js';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
 import { ZodValidationPipe } from '../common/zod-validation.pipe.js';
 import { AuditService } from './audit.service.js';
+import { GamesAdminService } from './games-admin.service.js';
 import { ModerationService } from './moderation.service.js';
 import { ReportsService } from './reports.service.js';
 import { Roles } from './roles.decorator.js';
@@ -47,6 +51,7 @@ export class AdminController {
     private readonly moderation: ModerationService,
     private readonly reports: ReportsService,
     private readonly audit: AuditService,
+    private readonly gamesAdmin: GamesAdminService,
   ) {}
 
   @Get('users')
@@ -135,5 +140,22 @@ export class AdminController {
     @Query(new ZodValidationPipe(auditQuerySchema)) query: z.output<typeof auditQuerySchema>,
   ): Promise<Page<AuditLogView>> {
     return this.audit.list(query);
+  }
+
+  @Get('games')
+  @Roles('ADMIN')
+  games(): Promise<AdminGameView[]> {
+    return this.gamesAdmin.list();
+  }
+
+  @Patch('games/:gameId')
+  @Roles('ADMIN')
+  setGameEnabled(
+    @CurrentUser() actor: AuthUser,
+    @Param('gameId', new ZodValidationPipe(gameIdParamSchema)) gameId: string,
+    @Body(new ZodValidationPipe(setGameEnabledSchema))
+    body: z.output<typeof setGameEnabledSchema>,
+  ): Promise<AdminGameView> {
+    return this.gamesAdmin.setEnabled(actor, gameId, body.enabled, body.reason);
   }
 }

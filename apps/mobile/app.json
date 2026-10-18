@@ -20,7 +20,9 @@
       "supportsTablet": false,
       "infoPlist": {
         "NSMicrophoneUsageDescription": "GameVerse uses the microphone for voice chat in matches.",
-        "UIBackgroundModes": ["audio"]
+        "UIBackgroundModes": [
+          "audio"
+        ]
       }
     },
     "android": {
@@ -33,6 +35,16 @@
         "FOREGROUND_SERVICE_MICROPHONE",
         "POST_NOTIFICATIONS"
       ]
+    },
+    "extra": {
+      "router": {
+        "asyncRoutes": {
+          "web": true
+        }
+      },
+      "eas": {
+        "projectId": "772a3301-c680-4d46-8116-e2b0dbe0dc38"
+      }
     }
   }
 }

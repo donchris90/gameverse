@@ -54,6 +54,13 @@ export const changeRoleSchema = z.object({
   reason: moderationReason,
 });
 
+export const gameIdParamSchema = z.string().regex(/^[a-z][a-z0-9-]{0,31}$/);
+
+export const setGameEnabledSchema = z.object({
+  enabled: z.boolean(),
+  reason: moderationReason,
+});
+
 export const auditQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(PAGE_SIZE_MAX).default(50),
   cursor: z.uuid().optional(),
@@ -108,6 +115,15 @@ export interface AdminUserDetail extends AdminUserSummary {
     moderatorId: string;
     createdAt: string;
   }[];
+}
+
+/** A game in the catalogue as the admin sees it, switched on or off. */
+export interface AdminGameView {
+  id: string;
+  name: string;
+  enabled: boolean;
+  minPlayers: number;
+  maxPlayers: number;
 }
 
 export interface AuditLogView {

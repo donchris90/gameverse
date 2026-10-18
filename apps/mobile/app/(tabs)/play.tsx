@@ -1,290 +1,178 @@
 import { theme } from '@gameverse/design-system';
-import {
-  BOT_LEVELS,
-  QUEUE_BOT_OFFER_AFTER_MS,
-  type BotLevelName,
-  type GameId,
-  type MatchView,
-  type RoomView,
-} from '@gameverse/shared-types';
-import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
-import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import type { GameId } from '@gameverse/shared-types';
+import { useState } from 'react';
+import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { games } from '../../src/api-client';
-import { realtime } from '../../src/realtime';
-import { LudoCard } from '../../src/ludo/LudoCard';
-import { Body, Button, ErrorText, Loading, TextField, useAction, useLoad } from '../../src/ui';
+import { GAME_INFO, GameArt } from '../../src/GameArt';
+import { usePlay } from '../../src/play-state';
+import { Body, Button, ErrorText, Loading, TextField } from '../../src/ui';
 
 const c = theme.colors;
 const s = theme.spacing;
 
-// Only games that are playable end to end are listed.
-const LIBRARY: { id: GameId; name: string; blurb: string }[] = [
-  { id: 'tictactoe', name: 'Tic-tac-toe', blurb: 'Best of 3. Two players, 20 seconds a turn.' },
-];
+/** Order the games appear in. A game shows only when the server lists it as playable. */
+const SHELF: GameId[] = ['tictactoe', 'ludo'];
 
-function Card({ children }: { children: React.ReactNode }) {
-  return <View style={styles.card}>{children}</View>;
-}
-
-function Heading({ children }: { children: string }) {
-  return (
-    <Text accessibilityRole="header" style={styles.heading}>
-      {children}
-    </Text>
-  );
-}
-
-export default function PlayTab() {
-  const router = useRouter();
-  const act = useAction();
+export default function PlayHome() {
+  const play = usePlay();
+  const { router, act, progress, resume, invites, search, listedGames } = play;
   const [code, setCode] = useState('');
-  const [level, setLevel] = useState<BotLevelName>('medium');
-  const [, setTick] = useState(0);
 
-  const current = useLoad(useCallback(() => games.currentMatch(), []));
-  const queue = useLoad(useCallback(() => games.queue(), []));
-  const lobby = useLoad(useCallback(() => games.lobby(), []));
-  const progress = useLoad(useCallback(() => games.progress(), []));
+  if (play.current.loading && !play.current.data) return <Loading />;
 
-  const { reload: reloadCurrent } = current;
-  const { reload: reloadQueue } = queue;
-  const { reload: reloadLobby } = lobby;
-  const { reload: reloadProgress } = progress;
-  const reloadAll = useCallback(() => {
-    void reloadCurrent();
-    void reloadQueue();
-    void reloadLobby();
-    void reloadProgress();
-  }, [reloadCurrent, reloadQueue, reloadLobby, reloadProgress]);
-
-  useFocusEffect(reloadAll);
-
-  const openMatch = useCallback(
-    (match: MatchView) => router.push({ pathname: '/match/[id]', params: { id: match.id } }),
-    [router],
-  );
-
-  // A found match or a changed room arrives by push; refetch what the screen shows.
-  useEffect(() => {
-    const off = realtime.subscribe((event) => {
-      if (event.type === 'match.update' && event.match.status !== 'COMPLETED') {
-        void reloadQueue();
-        void reloadCurrent();
-      }
-      if (event.type === 'room.update') void reloadLobby();
-    });
-    const offConnection = realtime.onConnectionChange((connected) => {
-      if (connected) reloadAll();
-    });
-    return () => {
-      off();
-      offConnection();
-    };
-  }, [reloadAll, reloadCurrent, reloadLobby, reloadQueue]);
-
-  const anySearch = queue.data?.state === 'searching' ? queue.data.searching : null;
-  const searching = anySearch?.gameId === 'tictactoe' ? anySearch : null;
-  const matchedFromQueue = queue.data?.state === 'matched' ? queue.data.match : null;
-
-  // Poll while searching so the bot offer and the match appear without a push.
-  useEffect(() => {
-    if (!anySearch) return;
-    const timer = setInterval(() => {
-      setTick((n) => n + 1);
-      void reloadQueue();
-    }, 2000);
-    return () => clearInterval(timer);
-  }, [anySearch, reloadQueue]);
-
-  const resume = current.data?.match ?? matchedFromQueue;
-  const anyHosted: RoomView | null = lobby.data?.hosted ?? null;
-  const anyJoined: RoomView | null = lobby.data?.joined ?? null;
-  // Each game's card shows only its own rooms.
-  const hosted: RoomView | null = anyHosted?.gameId === 'tictactoe' ? anyHosted : null;
-  const ludoHosted: RoomView | null = anyHosted?.gameId === 'ludo' ? anyHosted : null;
-  const ludoJoined: RoomView | null = anyJoined?.gameId === 'ludo' ? anyJoined : null;
-  // Ludo is listed only when the server says it is playable (it hides games that are switched off).
-  const ludoListed = progress.data?.games.some((g) => g.gameId === 'ludo') ?? false;
-  const invites = lobby.data?.invites ?? [];
-
-  const run = (work: () => Promise<unknown>) =>
-    act.run(async () => {
-      await work();
-      reloadAll();
-    });
-  const start = (work: () => Promise<MatchView>) =>
-    act.run(async () => {
-      openMatch(await work());
-      reloadAll();
-    });
-
-  if (current.loading && !current.data) return <Loading />;
+  const shelf = SHELF;
+  const stats = new Map(progress.data?.games.map((g) => [g.gameId as string, g]) ?? []);
+  const level = progress.data;
+  const fill = level ? Math.min(1, level.xp / Math.max(1, level.nextLevelXp)) : 0;
 
   return (
     <ScrollView
       style={styles.screen}
       contentContainerStyle={styles.content}
       refreshControl={
-        <RefreshControl refreshing={false} onRefresh={reloadAll} tintColor={c.primary} />
+        <RefreshControl refreshing={false} onRefresh={play.reloadAll} tintColor={c.primary} />
       }
     >
-      {progress.data ? (
-        <Card>
-          <Text style={styles.big}>Level {progress.data.level}</Text>
-          <Body muted>
-            {progress.data.xp} XP · next level at {progress.data.nextLevelXp} XP
-          </Body>
-          {progress.data.games.map((g) => (
-            <Body key={g.gameId}>
-              {g.gameId === 'ludo' ? 'Ludo' : 'Tic-tac-toe'}: rating {g.rating} · {g.wins}W{' '}
-              {g.losses}L {g.draws}D
-            </Body>
-          ))}
-        </Card>
-      ) : null}
+      <View style={styles.header}>
+        <Text accessibilityRole="header" style={styles.title}>
+          Choose a game
+        </Text>
+        {level ? (
+          <View
+            accessible
+            accessibilityLabel={`Level ${level.level}, ${level.xp} of ${level.nextLevelXp} experience points`}
+            style={styles.levelRow}
+          >
+            <View style={styles.levelPill}>
+              <Text style={styles.levelPillText}>Level {level.level}</Text>
+            </View>
+            <View style={styles.track}>
+              <View style={[styles.trackFill, { width: `${Math.round(fill * 100)}%` }]} />
+            </View>
+            <Text style={styles.xp}>
+              {level.xp}/{level.nextLevelXp} XP
+            </Text>
+          </View>
+        ) : null}
+      </View>
 
       <ErrorText error={act.error} />
 
       {resume ? (
-        <Card>
-          <Heading>Match in progress</Heading>
-          <Body muted>You have an open match.</Body>
-          <Button label="Resume match" onPress={() => openMatch(resume)} />
-        </Card>
+        <View style={[styles.banner, { borderColor: c.success }]}>
+          <View style={styles.flex}>
+            <Text style={styles.bannerTitle}>Match in progress</Text>
+            <Body muted>Pick up where you left off.</Body>
+          </View>
+          <View style={styles.bannerButton}>
+            <Button label="Resume" onPress={() => play.openMatch(resume)} />
+          </View>
+        </View>
+      ) : null}
+
+      {search ? (
+        <View style={styles.banner}>
+          <View style={styles.flex}>
+            <Text style={styles.bannerTitle}>Looking for a player…</Text>
+            <Body muted>{GAME_INFO[search.gameId as GameId]?.name ?? 'Game'}</Body>
+          </View>
+          <View style={styles.bannerButton}>
+            <Button
+              label="Cancel"
+              tone="secondary"
+              busy={act.busy}
+              onPress={() => void play.run(() => games.cancelQueue())}
+            />
+          </View>
+        </View>
       ) : null}
 
       {invites.map((invite) => (
-        <Card key={invite.id}>
-          <Heading>Game invite</Heading>
-          <Body>{invite.host.username} invited you to play.</Body>
-          <Button
-            label="Accept"
-            busy={act.busy}
-            onPress={() => void start(() => games.acceptInvite(invite.id))}
-          />
-          <Button
-            label="Decline"
-            tone="secondary"
-            busy={act.busy}
-            onPress={() => void run(() => games.declineInvite(invite.id))}
-          />
-        </Card>
-      ))}
-
-      {LIBRARY.map((game) => (
-        <Card key={game.id}>
-          <Heading>{game.name}</Heading>
-          <Body muted>{game.blurb}</Body>
-
-          {searching ? (
-            <>
-              <Body>Looking for an opponent…</Body>
-              {searching.waitedMs >= QUEUE_BOT_OFFER_AFTER_MS || searching.botOffer ? (
-                <Body muted>Taking a while. You can play a computer player instead.</Body>
-              ) : null}
-              {searching.botOffer ? (
-                <Button
-                  label="Play a bot instead"
-                  busy={act.busy}
-                  onPress={() =>
-                    void start(async () => {
-                      await games.cancelQueue();
-                      return games.startBot(game.id, 'medium');
-                    })
-                  }
-                />
-              ) : null}
-              <Button
-                label="Cancel search"
-                tone="secondary"
-                busy={act.busy}
-                onPress={() => void run(() => games.cancelQueue())}
-              />
-            </>
-          ) : (
-            <Button
-              label="Find a player"
-              busy={act.busy}
-              disabled={!!resume || !!anyHosted || !!anyJoined || !!anySearch}
-              onPress={() => void run(() => games.joinQueue(game.id))}
-            />
-          )}
-
-          <Body muted>Practice against a bot</Body>
-          <View style={styles.row}>
-            {BOT_LEVELS.map((name) => (
-              <View key={name} style={styles.flex}>
-                <Button
-                  label={name}
-                  tone={level === name ? 'primary' : 'secondary'}
-                  onPress={() => setLevel(name)}
-                />
-              </View>
-            ))}
+        <View key={invite.id} style={styles.banner}>
+          <View style={styles.flex}>
+            <Text style={styles.bannerTitle}>Game invite</Text>
+            <Body muted>{invite.host.username} invited you to play.</Body>
           </View>
-          <Button
-            label={`Play ${level} bot`}
-            tone="secondary"
-            busy={act.busy}
-            disabled={!!resume || !!anySearch || !!anyHosted || !!anyJoined}
-            onPress={() => void start(() => games.startBot(game.id, level))}
-          />
-
-          <Button
-            label="Leaderboard"
-            tone="secondary"
-            onPress={() => router.push({ pathname: '/leaderboard', params: { gameId: game.id } })}
-          />
-        </Card>
-      ))}
-
-      {ludoListed ? (
-        <LudoCard
-          busy={act.busy}
-          blocked={!!resume || !!anySearch || !!anyHosted || !!anyJoined}
-          searching={anySearch}
-          hosted={ludoHosted}
-          joined={ludoJoined}
-          level={level}
-          setLevel={setLevel}
-          run={run}
-          start={start}
-        />
-      ) : null}
-
-      <Card>
-        <Heading>Play with a friend</Heading>
-        {hosted && hosted.status === 'OPEN' ? (
-          <>
-            <Body>
-              {hosted.invited ? `Waiting for ${hosted.invited.username}` : 'Share this code:'}
-            </Body>
-            {hosted.code ? <Text style={styles.code}>{hosted.code}</Text> : null}
+          <View style={styles.bannerButton}>
             <Button
-              label="Close room"
+              label="Accept"
+              busy={act.busy}
+              onPress={() => void play.start(() => games.acceptInvite(invite.id))}
+            />
+            <Button
+              label="Decline"
               tone="secondary"
               busy={act.busy}
-              onPress={() => void run(() => games.closeRoom(hosted.id))}
+              onPress={() => void play.run(() => games.declineInvite(invite.id))}
             />
-          </>
-        ) : hosted && hosted.matchId ? (
-          <Button
-            label="Open friend match"
-            onPress={() =>
-              router.push({ pathname: '/match/[id]', params: { id: hosted.matchId ?? '' } })
+          </View>
+        </View>
+      ))}
+
+      {shelf.map((id) => {
+        const info = GAME_INFO[id];
+        const record = stats.get(id);
+        // A game the server has not switched on is shown as "Coming soon", never as playable.
+        const soon = !(listedGames.has(id) || id === 'tictactoe');
+        return (
+          <Pressable
+            key={id}
+            accessibilityRole="button"
+            accessibilityLabel={
+              soon
+                ? `${info.name}. Coming soon.`
+                : `${info.name}. ${info.tagline} ${info.tags.join(', ')}.`
             }
-          />
-        ) : (
-          <Button
-            label="Create a private room"
-            busy={act.busy}
-            disabled={!!resume || !!anySearch || !!anyHosted || !!anyJoined}
-            onPress={() => void run(() => games.createRoom('tictactoe'))}
-          />
-        )}
+            accessibilityState={{ disabled: soon }}
+            disabled={soon}
+            onPress={() => router.push({ pathname: '/game/[id]', params: { id } })}
+            style={({ pressed }) => [
+              styles.gameCard,
+              soon && styles.gameCardSoon,
+              pressed && styles.gameCardPressed,
+            ]}
+          >
+            <View style={[styles.banner2, { backgroundColor: info.banner }]}>
+              <GameArt gameId={id} size={104} />
+            </View>
+            <View style={styles.gameBody}>
+              <View style={styles.gameTitleRow}>
+                <Text style={styles.gameName}>{info.name}</Text>
+                {soon ? (
+                  <View style={styles.soonBadge}>
+                    <Text style={styles.soonText}>Coming soon</Text>
+                  </View>
+                ) : (
+                  <Text style={styles.chevron}>›</Text>
+                )}
+              </View>
+              <Body muted>{info.tagline}</Body>
+              <View style={styles.tags}>
+                {info.tags.map((tag) => (
+                  <View key={tag} style={styles.tag}>
+                    <Text style={styles.tagText}>{tag}</Text>
+                  </View>
+                ))}
+                {record ? (
+                  <View style={[styles.tag, styles.tagStat]}>
+                    <Text style={styles.tagText}>
+                      {record.rating} · {record.wins}W {record.losses}L {record.draws}D
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+            </View>
+          </Pressable>
+        );
+      })}
+
+      <View style={styles.codeCard}>
+        <Text accessibilityRole="header" style={styles.codeHeading}>
+          Have a room code?
+        </Text>
+        <Body muted>Friends can share a 6-character code to play together.</Body>
         <TextField
-          label="Have a code?"
+          label="Room code"
           value={code}
           onChangeText={(text) => setCode(text.toUpperCase())}
           autoCapitalize="characters"
@@ -295,44 +183,96 @@ export default function PlayTab() {
         <Button
           label="Join room"
           busy={act.busy}
-          disabled={code.trim().length !== 6 || !!resume || !!anyJoined}
+          disabled={code.trim().length !== 6 || !!resume || !!play.joined}
           onPress={() =>
             void act.run(async () => {
               // A full table starts at once; otherwise the player now sits in the room.
               const joinedRoom = await games.joinRoomResult(code);
               setCode('');
-              if (joinedRoom.match) openMatch(joinedRoom.match);
-              reloadAll();
+              if (joinedRoom.match) play.openMatch(joinedRoom.match);
+              play.reloadAll();
             })
           }
         />
-        <Body muted>To invite a friend directly, open their profile from the Friends tab.</Body>
-      </Card>
+      </View>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: c.background },
-  content: { padding: s.lg, paddingBottom: s.xxl },
-  card: {
+  content: { padding: s.lg, paddingBottom: s.xxxl },
+  flex: { flex: 1 },
+  header: { marginBottom: s.lg },
+  title: { color: c.textPrimary, fontSize: 28, fontWeight: '800', marginBottom: s.md },
+  levelRow: { flexDirection: 'row', alignItems: 'center', gap: s.sm },
+  levelPill: {
+    backgroundColor: c.primary,
+    borderRadius: theme.radii.pill,
+    paddingHorizontal: s.md,
+    paddingVertical: s.xs,
+  },
+  levelPillText: { color: c.textOnAccent, fontWeight: '700', fontSize: 13 },
+  track: {
+    flex: 1,
+    height: 8,
+    borderRadius: theme.radii.pill,
+    backgroundColor: c.surfaceRaised,
+    overflow: 'hidden',
+  },
+  trackFill: { height: 8, backgroundColor: c.success, borderRadius: theme.radii.pill },
+  xp: { color: c.textSecondary, fontSize: 12 },
+  banner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: s.md,
     backgroundColor: c.surface,
-    borderRadius: theme.radii.md,
     borderColor: c.border,
     borderWidth: 1,
+    borderRadius: theme.radii.lg,
     padding: s.lg,
+    marginBottom: s.md,
+  },
+  bannerTitle: { color: c.textPrimary, fontSize: 16, fontWeight: '700' },
+  bannerButton: { minWidth: 110, gap: s.sm },
+  gameCard: {
+    backgroundColor: c.surface,
+    borderColor: c.border,
+    borderWidth: 1,
+    borderRadius: theme.radii.xl,
+    overflow: 'hidden',
     marginBottom: s.lg,
   },
-  heading: { color: c.textPrimary, fontSize: 20, fontWeight: '700', marginBottom: s.xs },
-  big: { color: c.textPrimary, fontSize: 24, fontWeight: '700' },
-  code: {
-    color: c.textPrimary,
-    fontSize: 36,
-    fontWeight: '800',
-    letterSpacing: 6,
-    textAlign: 'center',
-    marginVertical: s.md,
+  gameCardSoon: { opacity: 0.6 },
+  soonBadge: {
+    backgroundColor: c.surfaceRaised,
+    borderRadius: theme.radii.pill,
+    paddingHorizontal: s.md,
+    paddingVertical: s.xs,
   },
-  row: { flexDirection: 'row', gap: s.sm },
-  flex: { flex: 1 },
+  soonText: { color: c.textSecondary, fontSize: 12, fontWeight: '700' },
+  gameCardPressed: { opacity: 0.85, transform: [{ scale: 0.99 }] },
+  banner2: { height: 150, alignItems: 'center', justifyContent: 'center' },
+  gameBody: { padding: s.lg, gap: s.sm },
+  gameTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  gameName: { color: c.textPrimary, fontSize: 22, fontWeight: '800' },
+  chevron: { color: c.textSecondary, fontSize: 30, lineHeight: 30 },
+  tags: { flexDirection: 'row', flexWrap: 'wrap', gap: s.sm, marginTop: s.xs },
+  tag: {
+    backgroundColor: c.surfaceRaised,
+    borderRadius: theme.radii.pill,
+    paddingHorizontal: s.md,
+    paddingVertical: s.xs,
+  },
+  tagStat: { backgroundColor: c.background, borderColor: c.border, borderWidth: 1 },
+  tagText: { color: c.textSecondary, fontSize: 12, fontWeight: '600' },
+  codeCard: {
+    backgroundColor: c.surface,
+    borderColor: c.border,
+    borderWidth: 1,
+    borderRadius: theme.radii.lg,
+    padding: s.lg,
+    gap: s.sm,
+  },
+  codeHeading: { color: c.textPrimary, fontSize: 18, fontWeight: '700' },
 });
