@@ -12,6 +12,7 @@ import {
   setSignedOutHandler,
 } from './http';
 import { unregisterPush } from './push';
+import { setReportedUser } from './observability';
 import { realtime } from './realtime';
 
 export type SessionState =
@@ -64,6 +65,10 @@ async function loadProfile(user: AuthSession['user']): Promise<SessionState> {
 
 export function SessionProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<SessionState>({ status: 'loading' });
+
+  const reportedId =
+    state.status === 'ready' || state.status === 'needs-profile' ? state.user.id : null;
+  useEffect(() => setReportedUser(reportedId), [reportedId]);
 
   const localSignOut = useCallback(async () => {
     realtime.disconnect();

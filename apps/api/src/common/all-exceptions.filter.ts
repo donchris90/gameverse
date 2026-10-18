@@ -9,6 +9,7 @@ import {
 import { ThrottlerException } from '@nestjs/throttler';
 import { ErrorCode, type ApiErrorBody } from '@gameverse/shared-types';
 import type { Request, Response } from 'express';
+import { ErrorReporter } from '../observability/error-reporter.js';
 import { AppException } from './app.exception.js';
 
 const STATUS_TO_CODE: Record<number, ErrorCode> = {
@@ -39,6 +40,8 @@ function httpStatusOf(exception: unknown): number | undefined {
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
   private readonly logger = new Logger(AllExceptionsFilter.name);
+
+  constructor(private readonly reporter: ErrorReporter) {}
 
   catch(exception: unknown, host: ArgumentsHost): void {
     const http = host.switchToHttp();
@@ -82,6 +85,11 @@ export class AllExceptionsFilter implements ExceptionFilter {
         { requestId, err: exception instanceof Error ? exception.message : 'non-error thrown' },
         exception instanceof Error ? exception.stack : undefined,
       );
+      this.reporter.capture(exception, {
+        requestId,
+        route: `${request.method} ${request.route?.path ?? 'unmatched'}`,
+        userId: (request as { user?: { id?: string } }).user?.id,
+      });
     }
 
     const payload: ApiErrorBody = { error: body, ...(requestId ? { requestId } : {}) };

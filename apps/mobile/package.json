@@ -14,6 +14,7 @@
     "@gameverse/game-rules": "workspace:*",
     "@gameverse/shared-types": "workspace:*",
     "@notifee/react-native": "9.1.8",
+    "@sentry/react-native": "^8.31.0",
     "expo": "58.0.14",
     "expo-constants": "~58.0.12",
     "expo-crypto": "~58.0.7",

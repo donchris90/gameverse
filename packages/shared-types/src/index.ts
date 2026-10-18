@@ -13,6 +13,7 @@ export * from './progress.js';
 export * from './match-ui.js';
 export * from './ludo-ui.js';
 export * from './retry.js';
+export * from './scrub.js';
 export * from './voice.js';
 export * from './voice-ui.js';
 export * from './voice-controller.js';

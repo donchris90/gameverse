@@ -4,6 +4,7 @@ import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { LoggerModule } from 'nestjs-pino';
 import { AuthModule } from './auth/auth.module.js';
+import { ObservabilityModule } from './observability/observability.module.js';
 import { AllExceptionsFilter } from './common/all-exceptions.filter.js';
 import { buildThrottlers } from './common/rate-limit.js';
 import type { AppConfig } from './config/config.js';
@@ -69,6 +70,7 @@ export class AppModule {
           },
         }),
         ThrottlerModule.forRoot({ throttlers: buildThrottlers(config) }),
+        ObservabilityModule,
         PrismaModule,
         AuthModule,
         ProfilesModule,

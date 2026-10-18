@@ -64,6 +64,14 @@ const envSchema = z
     /** How long a user must stay disconnected before friends are told they went offline. */
     PRESENCE_OFFLINE_GRACE_MS: z.coerce.number().int().min(0).max(60_000).default(5000),
 
+    /** Sentry error reporting. Off unless a DSN is set. Events are scrubbed before sending. */
+    SENTRY_DSN: z
+      .url()
+      .optional()
+      .or(z.literal('').transform(() => undefined)),
+    SENTRY_ENVIRONMENT: z.string().trim().min(1).optional(),
+    SENTRY_RELEASE: z.string().trim().min(1).optional(),
+
     RATE_LIMIT_DEFAULT_PER_MIN: z.coerce.number().int().min(1).max(100_000).default(120),
     RATE_LIMIT_AUTH_PER_MIN: z.coerce.number().int().min(1).max(10_000).default(10),
   })
