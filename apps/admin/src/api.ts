@@ -1,4 +1,5 @@
 import type {
+  AdminGameView,
   AdminUserDetail,
   AdminUserSummary,
   AuditLogView,
@@ -180,6 +181,9 @@ export const api = {
     }),
   changeRole: (id: string, role: UserRole, reason: string) =>
     call<void>('PATCH', `/v1/admin/users/${id}/role`, { role, reason }),
+  games: () => call<AdminGameView[]>('GET', '/v1/admin/games'),
+  setGameEnabled: (id: string, enabled: boolean, reason: string) =>
+    call<AdminGameView>('PATCH', `/v1/admin/games/${id}`, { enabled, reason }),
   audit: (cursor?: string, targetId?: string) =>
     call<Page<AuditLogView>>('GET', `/v1/admin/audit-logs${query({ cursor, targetId })}`),
 };

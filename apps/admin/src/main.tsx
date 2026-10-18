@@ -4,10 +4,11 @@ import { createRoot } from 'react-dom/client';
 import { ApiError, getSession, restore, signIn, signOut, subscribe } from './api.js';
 import { Button, ErrorNote, styles } from './ui.js';
 import { Audit } from './views/Audit.js';
+import { Games } from './views/Games.js';
 import { Reports } from './views/Reports.js';
 import { Users } from './views/Users.js';
 
-type Tab = 'reports' | 'users' | 'audit';
+type Tab = 'reports' | 'users' | 'games' | 'audit';
 
 function Login() {
   const [email, setEmail] = useState('');
@@ -88,6 +89,11 @@ function App() {
           Users
         </Button>
         {isAdmin && (
+          <Button tone={tab === 'games' ? 'primary' : 'neutral'} onClick={() => setTab('games')}>
+            Games
+          </Button>
+        )}
+        {isAdmin && (
           <Button tone={tab === 'audit' ? 'primary' : 'neutral'} onClick={() => setTab('audit')}>
             Audit log
           </Button>
@@ -95,6 +101,7 @@ function App() {
       </nav>
       {tab === 'reports' && <Reports />}
       {tab === 'users' && <Users />}
+      {tab === 'games' && isAdmin && <Games />}
       {tab === 'audit' && isAdmin && <Audit />}
     </>
   );

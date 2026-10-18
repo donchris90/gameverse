@@ -351,3 +351,11 @@ One full integration run had a single `concurrency-matches` failure with the err
 **Unverified/blocked register and the 12-item gate table: `docs/phase-5-checkpoint.md`.** Not verified: all mobile code on devices, Maestro runs, voice (Agora), Apple/Google sign-in with real tokens, `prisma migrate deploy`, hosted backup restore, real email, first CI run. Not implemented: Apple token revocation on deletion.
 
 **Next exact action:** owner reviews the checkpoint, then supplies Agora keys/devices, EAS builds and store accounts so the blocked items can be run.
+
+## Admin game switch, games home, tab icons (2026-10-18, after the Phase 5 checkpoint)
+
+- Found on the first real-device run: start-up crash (WorkManager vs R8, decision #101), "Unmatched Route" at launch (start route restored, #102), missing tab icons. Fixed in code; **each is unverified until a rebuilt build is run on the phone** except where stated.
+- Games home with a card per game and a game screen (#103); Ludo shows as "Coming soon" until the server lists it. Seen only as code and a successful bundle.
+- Admin game switch (#104): `GET/PATCH /v1/admin/games`, Games tab in the admin. Verified: `admin-games.e2e-spec.ts` 6/6 (mutation-checked on the admin-only rule), full integration run 564/564 twice, turbo 22/22, Prettier clean, and a real browser run against the real API (turned Ludo on with a reason; the database changed and an audit row was written).
+
+**Not verified:** all mobile screens on a device after these changes; the admin Games tab was not run against the deployed Render API.
