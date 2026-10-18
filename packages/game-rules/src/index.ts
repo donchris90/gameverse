@@ -7,3 +7,5 @@ export * from './ludo-bots.js';
 export * from './ludo-board.js';
 export * from './draughts.js';
 export * from './draughts-bots.js';
+export * from './ayo.js';
+export * from './ayo-bots.js';
