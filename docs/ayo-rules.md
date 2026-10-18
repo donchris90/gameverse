@@ -37,7 +37,7 @@ Status: **second draft, nothing built.** Rewritten on 2026-10-18 from the owner'
 
 ## Worked example (first move, all pits at 4)
 
-Seat 0 lifts pit 0 (4 seeds) and sows pits 1, 2, 3, 4, which become 5, 5, 5, 5. The last seed made pit 4 hold 5, so it is a relay: lift pit 4 (5 seeds) and sow pits 5-9 (pit 9 becomes 5). Pit 9 is non-empty: lift its 5 and sow pits 10, 11, 0, 1, 2 (pit 0 had been emptied, so it now holds 1); the last seed makes pit 2 hold 7 - lift 6... the exact relay continues until a last seed lands in an empty pit. The computed result of this move from the start position (checked by a throwaway script, not yet by the game code) is the board `[2, 7, 1, 6, 1, 6, 6, 6, 0, 1, 6, 6]` for pits 0-11, with nothing reaped. Opening moves never reap because every pit holds 4 and each seed makes a 5 or more.
+Seat 0 lifts pit 0 (4 seeds) and sows pits 1, 2, 3, 4, which each become 5. The last seed landed in a pit that already held seeds, so it relays: lift pit 4 (5 seeds) and sow pits 5-9. Pit 9 held seeds, so lift its 5 and sow pits 10, 11, 0, 1, 2 (pit 0 had been emptied, so it now holds 1). Pit 2 now holds 6: lift it and sow pits 3-8. Pit 8 now holds 6: lift it and sow pits 9, 10, 11, 0, 1, 2. The last seed lands in pit 2, which had just been emptied, so it holds 1 and the turn ends. Result, pits 0-11: `[2, 7, 1, 6, 1, 6, 6, 6, 0, 1, 6, 6]`, nothing reaped. (Worked out by a throwaway script, not yet by the game code.) Opening moves never reap, because every pit holds 4 and each seed makes it 5 or more.
 
 ## What the server does and the client cannot
 
