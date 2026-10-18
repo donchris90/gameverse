@@ -30,6 +30,13 @@ export const GAME_INFO: Record<GameId, GameInfo> = {
     tags: ['2 to 4 players', '15 min'],
     banner: '#10304F',
   },
+  draughts: {
+    id: 'draughts',
+    name: 'Draughts',
+    tagline: 'Jump your rivals, crown your kings. 20 seconds a turn.',
+    tags: ['2 players', '10 min'],
+    banner: '#4A2E14',
+  },
 };
 
 /** Decorative artwork drawn with plain views; hidden from screen readers. */
@@ -40,7 +47,56 @@ export function GameArt({ gameId, size = 96 }: { gameId: GameId; size?: number }
       importantForAccessibility="no-hide-descendants"
       style={{ width: size, height: size }}
     >
-      {gameId === 'tictactoe' ? <TicTacToeArt size={size} /> : <LudoArt size={size} />}
+      {gameId === 'tictactoe' ? (
+        <TicTacToeArt size={size} />
+      ) : gameId === 'draughts' ? (
+        <DraughtsArt size={size} />
+      ) : (
+        <LudoArt size={size} />
+      )}
+    </View>
+  );
+}
+
+function DraughtsArt({ size }: { size: number }) {
+  const cell = size / 4;
+  const pieces: Record<number, string> = {
+    1: '#F4EBD9',
+    4: '#F4EBD9',
+    6: '#B3261E',
+    11: '#B3261E',
+  };
+  return (
+    <View style={[styles.grid, { width: size, height: size, borderRadius: 6, overflow: 'hidden' }]}>
+      {Array.from({ length: 16 }, (_unused, index) => {
+        const dark = (Math.floor(index / 4) + (index % 4)) % 2 === 1;
+        const piece = pieces[index];
+        return (
+          <View
+            key={index}
+            style={{
+              width: cell,
+              height: cell,
+              backgroundColor: dark ? '#6B4A2B' : '#E8D3B0',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            {piece ? (
+              <View
+                style={{
+                  width: cell * 0.7,
+                  height: cell * 0.7,
+                  borderRadius: cell * 0.35,
+                  backgroundColor: piece,
+                  borderWidth: 2,
+                  borderColor: '#00000055',
+                }}
+              />
+            ) : null}
+          </View>
+        );
+      })}
     </View>
   );
 }

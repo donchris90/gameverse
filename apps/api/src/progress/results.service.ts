@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { draughtsOf } from '../matches/draughts.driver.js';
 import { ludoOf } from '../matches/ludo-driver.js';
 import {
   DEFAULT_RATING,
@@ -27,13 +28,29 @@ type Completed = GameMatch & { players: GameMatchPlayer[] };
  * transaction that completes the match, and the unique `matchId` on the result makes a second
  * attempt a no-op, so nothing is ever applied twice or half-applied.
  */
+/**
+ * Each two-seat game says how a finished match scored: 1 win, 0.5 draw, 0 loss. Null while the
+ * game is not finished, so nothing is recorded early.
+ */
+function finalScores(match: Completed): ((seat: Seat) => 0 | 0.5 | 1) | null {
+  if (match.gameId === 'draughts') {
+    const game = draughtsOf(match);
+    if (game === null || game.phase !== 'finished' || game.winner === null) return null;
+    const winner = game.winner;
+    return (seat) => (winner === 'draw' ? 0.5 : winner === seat ? 1 : 0);
+  }
+  const series = match.state as SeriesState | null;
+  if (series === null || series.phase !== 'completed') return null;
+  return (seat) => seriesScore(series, seat) ?? 0.5;
+}
+
 @Injectable()
 export class ResultsService {
   async record(tx: Tx, match: Completed): Promise<void> {
     if (match.status !== 'COMPLETED') return;
     if (match.gameId === 'ludo') return this.recordLudo(tx, match);
-    const series = match.state as SeriesState | null;
-    if (series === null || series.phase !== 'completed') return;
+    const scoreOf = finalScores(match);
+    if (scoreOf === null) return;
     if (await tx.gameResult.findUnique({ where: { matchId: match.id }, select: { id: true } })) {
       return;
     }
@@ -93,7 +110,7 @@ export class ResultsService {
     }[] = [];
     for (const player of seats) {
       const seat = player.seat as Seat;
-      const score = seriesScore(series, seat) ?? 0.5;
+      const score = scoreOf(seat);
       const userId = player.userId;
       let ratingBefore: number | null = null;
       let ratingNow: number | null = null;

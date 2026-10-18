@@ -2,7 +2,7 @@ import { z } from 'zod';
 import type { MatchResultView } from './progress.js';
 
 /** Games the server can host. A game is offered to players only once its `games` row is enabled. */
-export const GAME_IDS = ['tictactoe', 'ludo'] as const;
+export const GAME_IDS = ['tictactoe', 'ludo', 'draughts'] as const;
 export type GameId = (typeof GAME_IDS)[number];
 
 export const MATCH_STATUSES = [
@@ -115,6 +115,34 @@ export interface LudoView {
   lastEvents: LudoEventView[];
 }
 
+/** One legal draughts move: the starting square, the landing squares, and what it jumps. */
+export interface DraughtsMoveView {
+  from: number;
+  path: number[];
+  captures: number[];
+}
+
+/**
+ * Draughts state as the phone sees it. Squares are 0-63 (`row * 8 + col`, row 0 at the top).
+ * Board cells: 0 empty, 1 seat 0 man, 2 seat 0 king, 3 seat 1 man, 4 seat 1 king. The server
+ * computes `moves`, so the phone never has to know the rules.
+ */
+export interface DraughtsView {
+  phase: 'playing' | 'finished';
+  board: number[];
+  /** Seat on turn, or null once the game is over. */
+  toMove: PlayerSeat | null;
+  /** Every legal move for the seat on turn (captures only when a capture exists). */
+  moves: DraughtsMoveView[];
+  winner: PlayerSeat | 'draw' | null;
+  endReason: 'no_pieces' | 'no_moves' | 'repetition' | 'forty_moves' | 'timeout' | 'forfeit' | null;
+  plies: number;
+  /** Plies since the last capture or man move (the draw counter). */
+  sinceProgress: number;
+  /** The move that was just played, for highlighting. */
+  last: DraughtsMoveView | null;
+}
+
 export interface MatchView {
   id: string;
   gameId: GameId;
@@ -129,6 +157,8 @@ export interface MatchView {
   series: MatchSeriesView | null;
   /** Ludo state; null until the match is active and for other games. */
   ludo: LudoView | null;
+  /** Draughts state; null until the match is active and for other games. */
+  draughts: DraughtsView | null;
   deadline: { kind: MatchDeadlineKind; at: string } | null;
   serverTime: string;
   /** Why the match stopped early or finished: score, forfeit, timeout, left, expired. */
@@ -194,3 +224,14 @@ export const tokenMoveSchema = z
   })
   .strict();
 export type TokenMoveRequest = z.input<typeof tokenMoveSchema>;
+
+/** Draughts: play a move. The phone sends squares only; the server works out the captures. */
+export const draughtsMoveSchema = z
+  .object({
+    from: z.number().int().min(0).max(63),
+    path: z.array(z.number().int().min(0).max(63)).min(1).max(16),
+    clientActionId: z.uuid(),
+    expectedVersion: z.number().int().min(0),
+  })
+  .strict();
+export type DraughtsMoveRequest = z.input<typeof draughtsMoveSchema>;

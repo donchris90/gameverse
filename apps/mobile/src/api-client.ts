@@ -127,6 +127,17 @@ export const games = {
     request<MatchView>('POST', matchPath(id, 'token-moves'), {
       body: { token, clientActionId, expectedVersion },
     }),
+  /** Draughts: move a piece by squares (a capture lists each landing square). The server works out the rest. */
+  moveDraughts: (
+    id: string,
+    from: number,
+    path: number[],
+    clientActionId: string,
+    expectedVersion: number,
+  ) =>
+    request<MatchView>('POST', matchPath(id, 'draughts-moves'), {
+      body: { from, path, clientActionId, expectedVersion },
+    }),
   leave: (id: string) => request<MatchView>('POST', matchPath(id, 'leave'), { body: {} }),
   rematch: (id: string) => request<MatchView>('POST', matchPath(id, 'rematch'), { body: {} }),
   startBot: (gameId: GameId, level: BotLevelName, players?: number) =>

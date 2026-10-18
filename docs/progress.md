@@ -366,3 +366,15 @@ One full integration run had a single `concurrency-matches` failure with the err
 - Checked: `PRISMA_SCHEMA_ENGINE_BINARY=/bin/true pnpm exec turbo run lint typecheck build test --env-mode=loose` passed (145 API unit tests); `vitest run --config ./vitest.config.e2e.ts` in `apps/api`: 28 files, 564/564 passed (same count as before, no test edited); `scripts/smoke-dist.sh`: "compiled API is up and ready"; `prettier --check .` clean after formatting `apps/mobile/app.json`.
 - Not done: `match.view.ts` and `results.service.ts` still branch on game for the view and the result; they move behind the driver when the first new game needs different fields (6B).
 - Next exact action: Draughts rules doc for owner approval (slice 6B). Owner decisions still open: Draughts variant, Ayo variant, Whot house rules.
+
+## Phase 6, slice 6B: Draughts (2026-10-18)
+
+- Built: `packages/game-rules/src/draughts.ts` and `draughts-bots.ts` (rules, easy/medium/hard bots), `apps/api/src/matches/draughts.driver.ts`, route `POST /v1/matches/:id/draughts-moves`, result recording for a finished draughts game, migration `20261020000000_draughts` (row added **disabled**), `packages/shared-types/src/draughts-ui.ts`, mobile board `apps/mobile/src/draughts/DraughtsMatch.tsx`, game art, and a Play-tab card ("Coming soon" while off).
+- Checked (all run in this sandbox):
+  - `PRISMA_SCHEMA_ENGINE_BINARY=/bin/true pnpm exec turbo run lint typecheck build test --env-mode=loose`: 22 of 22 tasks passed (game-rules 24 draughts tests among them; shared-types 158 tests, 12 new).
+  - `vitest run --config ./vitest.config.e2e.ts` in `apps/api`: 29 files, 577/577 passed (564 earlier plus 13 new in `draughts.e2e-spec.ts`: full game to the end, illegal and out-of-turn moves, duplicate move, timeout, leave, disconnect, rematch, bot).
+  - Mutation checks on the rules: removing compulsory capture failed 6 tests; letting a crowned man keep jumping failed 1. Both reverted.
+  - `scripts/smoke-dist.sh`: "compiled API is up and ready". `prettier --check .` clean.
+- **Unverified:** the board screen on a phone, touch targets, colours, haptics, and bot strength by feel. Checklist in `docs/draughts-verification.md`. Draughts stays off until the owner plays it and enables it from the admin Games tab.
+- Known gaps: `match.view.ts` and `results.service.ts` still branch per game (moved behind the driver later). Hard bot is about 6 plies with a node cap; its strength has not been measured against people.
+- Next exact action: owner device check, then Ayo rules doc for approval (slice 6C).

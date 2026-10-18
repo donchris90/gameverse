@@ -6,13 +6,17 @@ import type { AnySeat, Change, EventDraft } from './match-changes.js';
 import type { MatchRecord } from './match.view.js';
 import { ludoDriver } from './ludo.driver.js';
 import { ticTacToeDriver } from './tictactoe.driver.js';
+import { draughtsDriver } from './draughts.driver.js';
 
 /**
  * What a player can ask a game to do. The transport (REST route, later a socket) maps its request
  * onto one of these; the driver decides whether it is legal. The client never sends an outcome.
  */
 export type DriverAction =
-  { kind: 'place'; cell: number } | { kind: 'roll' } | { kind: 'token'; token: number };
+  | { kind: 'place'; cell: number }
+  | { kind: 'roll' }
+  | { kind: 'token'; token: number }
+  | { kind: 'draughts'; from: number; path: number[] };
 
 /** What starting a match produces: the first state, its opening events and the first turn clock. */
 export interface StartResult {
@@ -62,7 +66,7 @@ export interface GameDriver {
   rematchOpening(match: MatchRecord, seatCount: number): AnySeat;
 }
 
-const DRIVERS: readonly GameDriver[] = [ticTacToeDriver, ludoDriver];
+const DRIVERS: readonly GameDriver[] = [ticTacToeDriver, ludoDriver, draughtsDriver];
 
 /** The driver for a game, or null when the server cannot run it. */
 export function findDriver(gameId: string): GameDriver | null {

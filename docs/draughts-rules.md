@@ -1,6 +1,6 @@
 # Draughts rules (English / American checkers, 8x8) - for owner approval
 
-Status: **draft, nothing built.** This document is the single source for the rules. Approve it or list changes, then slice 6B starts. Default variant chosen from `docs/phase-6-plan.md`; the Nigerian or international 10x10 variants are different games and would need their own document.
+Status: **approved by the owner 2026-10-18; built in slice 6B (see decision #108).** This document is the single source for the rules. Approve it or list changes, then slice 6B starts. Default variant chosen from `docs/phase-6-plan.md`; the Nigerian or international 10x10 variants are different games and would need their own document.
 
 ## Board and pieces
 

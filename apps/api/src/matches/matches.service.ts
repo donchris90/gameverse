@@ -3,6 +3,7 @@ import {
   DISCONNECT_GRACE_MS,
   ErrorCode,
   type BotLevelName,
+  type DraughtsMoveRequest,
   type GameId,
   type MatchKind,
   type MatchView,
@@ -356,6 +357,19 @@ export class MatchesService implements OnModuleInit {
 
   async move(userId: string, matchId: string, request: MoveRequest): Promise<MatchView> {
     return this.act(userId, matchId, request, { kind: 'place', cell: request.cell });
+  }
+
+  /** Draughts: play a move given as squares; the server works out the captures. */
+  async moveDraughts(
+    userId: string,
+    matchId: string,
+    request: DraughtsMoveRequest,
+  ): Promise<MatchView> {
+    return this.act(userId, matchId, request, {
+      kind: 'draughts',
+      from: request.from,
+      path: [...request.path],
+    });
   }
 
   /** Ludo: the server rolls the die for the player on turn. The phone sends no number. */

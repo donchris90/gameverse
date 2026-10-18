@@ -45,6 +45,12 @@ function generateCode(): string {
 
 export type { LobbyOverview };
 
+const GAME_NAMES: Record<GameId, string> = {
+  tictactoe: 'Tic-Tac-Toe',
+  ludo: 'Ludo',
+  draughts: 'Draughts',
+};
+
 @Injectable()
 export class RoomsService {
   private readonly joinFailures = new Map<string, { count: number; resetAt: number }>();
@@ -277,7 +283,7 @@ export class RoomsService {
     });
     this.push.notify(friendUserId, {
       title: 'GameVerse',
-      body: `${host?.username ?? 'A friend'} invited you to play ${gameId === 'ludo' ? 'Ludo' : 'Tic-Tac-Toe'}`,
+      body: `${host?.username ?? 'A friend'} invited you to play ${GAME_NAMES[gameId]}`,
       data: { type: 'GAME_INVITE', roomId: room.id },
     });
     const [view] = await this.viewsFor([room], hostId, now);

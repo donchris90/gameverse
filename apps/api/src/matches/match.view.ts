@@ -16,6 +16,7 @@ import type {
 import { BOT_AVATAR_ID, BOT_NAME } from './matches.constants.js';
 import { ludoOf, toLudoView } from './ludo-driver.js';
 import { seriesOf } from './tictactoe.driver.js';
+import { draughtsOf, toDraughtsView } from './draughts.driver.js';
 
 export type MatchRecord = GameMatch & {
   players: GameMatchPlayer[];
@@ -97,6 +98,7 @@ export function toMatchView(
     if ((mask & (1 << seat)) !== 0) requested.push(seat);
   }
   const ludo = ludoOf(match);
+  const draughts = draughtsOf(match);
   return {
     id: match.id,
     gameId: match.gameId as MatchView['gameId'],
@@ -109,6 +111,7 @@ export function toMatchView(
       .map((player) => toPlayerView(player, profiles)),
     series: series === null ? null : toSeriesView(series),
     ludo: ludo === null ? null : toLudoView(ludo),
+    draughts: draughts === null ? null : toDraughtsView(draughts),
     deadline:
       match.deadlineKind === null || match.deadlineAt === null
         ? null

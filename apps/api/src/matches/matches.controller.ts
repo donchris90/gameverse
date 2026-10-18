@@ -11,6 +11,7 @@ import {
 import {
   type MatchView,
   botMatchSchema,
+  draughtsMoveSchema,
   matchIdSchema,
   moveSchema,
   rollSchema,
@@ -86,6 +87,17 @@ export class MatchesController {
     @Body(new ZodValidationPipe(tokenMoveSchema)) body: z.output<typeof tokenMoveSchema>,
   ): Promise<MatchView> {
     return this.matches.moveToken(user.id, id, body);
+  }
+
+  /** Draughts: play a move given as squares. */
+  @Post(':id/draughts-moves')
+  @HttpCode(HttpStatus.OK)
+  moveDraughts(
+    @CurrentUser() user: AuthUser,
+    @idParam() id: string,
+    @Body(new ZodValidationPipe(draughtsMoveSchema)) body: z.output<typeof draughtsMoveSchema>,
+  ): Promise<MatchView> {
+    return this.matches.moveDraughts(user.id, id, body);
   }
 
   @Post(':id/leave')

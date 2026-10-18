@@ -40,7 +40,8 @@ export const ludoDriver: GameDriver = {
   },
 
   act(match, seat, action: DriverAction, clientActionId, now): Change {
-    if (action.kind === 'place') throw invalidState('The match is not in progress');
+    if (action.kind === 'place' || action.kind === 'draughts')
+      throw invalidState('The match is not in progress');
     const stored = ludoOf(match);
     if (stored === null) throw invalidState('This match has no dice');
     const state = ludoState(stored);
