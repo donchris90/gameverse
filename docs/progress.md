@@ -295,6 +295,7 @@ Next: 4C Ludo lobby (rooms for 2–4, public queue, bot fill, invites, rematch).
 Private rooms for 2–4 players with a member list, host Start (with or without labelled bots), guest Leave, and automatic start when full. Quick match for 2–4 players (same-size tables, pairwise rating band, no blocked pair at one table). Friend invites stay two-player. Rematch for N seats was done in 4B. Ludo stays **disabled** until 4E. Migration `20261019180000_ludo_lobby` (hand-written; `migrate deploy` unverified).
 
 Verified (run here):
+
 - `pnpm exec prettier --check .`: clean.
 - `pnpm turbo run lint typecheck build test --env-mode=loose`: 22/22 tasks (api unit 139, shared-types 89, game-rules 107).
 - `pnpm --filter @gameverse/api test:integration`: 22 files, 525/525 (was 505; `ludo-lobby.e2e-spec.ts` adds 20).
@@ -304,3 +305,20 @@ Verified (run here):
 Changed on the way: `POST /v1/rooms/join` returns `{ room, match }`; `matchmaking.join` takes `players` before `now`; the mobile API client keeps `joinRoom` (match only) and gains `joinRoomResult`, `startRoom`, `leaveRoom`, and `players` options. The mobile app still typechecks; it has no UI for these yet (4D).
 
 Next: 4D mobile Ludo board (SVG + Reanimated) and screens.
+
+## Phase 4D: Ludo mobile (2026-10-18; **device-unverified**)
+
+Added: the board (`react-native-svg` static layer, Reanimated tokens with hop animation), the die, the match screen (seat legend, status line, event ticker, placings, rematch, voice, chat per human, leave), the Play tab Ludo card (table size 2-4, quick match, bots, private table with code, Start / Fill with bots / Leave / Close), a Game animations setting, per-player Report and Block in the voice panel, and mobile dependencies (`react-native-svg` 15.16.0, `react-native-reanimated` 4.7.1, `react-native-worklets` 0.13.0, `expo-haptics` ~58.0.7, `@gameverse/game-rules`; versions from Expo SDK 58's bundled list). `eas-build-post-install` now builds game-rules too.
+
+Verified (run here):
+
+- `pnpm exec prettier --check .`: clean.
+- `pnpm turbo run lint typecheck build test --env-mode=loose`: 22/22 tasks (shared-types 136, game-rules 130, design-system 28, api unit 139). Mobile: `tsc --noEmit` and `oxlint -D correctness app src` clean.
+- Mutation checks on the new pure code (board geometry and Ludo UI logic): 15 of 15 caught.
+- The board geometry, colours and a mid-game token layout were drawn to an image with the same code and checked by eye: track, home columns, bases, safe-square stars and stacked tokens look right.
+
+Not verified: any of it running on a device or emulator (Reanimated/worklets setup, SVG rendering, tap targets, hop animation, haptics, TalkBack), and frame rate on a low-end Android phone. `docs/ludo-verification.md` lists the checks and how to measure.
+
+`pnpm` reports a peer warning (`react-dom 19.3.1` wants `react ^19.3.1`, the app pins `react 19.3.0`); it arrived with the new packages and is not fixed.
+
+Next: 4E, a full 4-player integration test (done in 4B), a load check with Ludo, enabling the game, and the Phase 4 checkpoint report.

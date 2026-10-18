@@ -7,16 +7,18 @@
     "start": "expo start --dev-client",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "oxlint -D correctness app src",
-    "eas-build-post-install": "pnpm --filter @gameverse/shared-types --filter @gameverse/design-system build"
+    "eas-build-post-install": "pnpm --filter @gameverse/shared-types --filter @gameverse/design-system --filter @gameverse/game-rules build"
   },
   "dependencies": {
     "@gameverse/design-system": "workspace:*",
+    "@gameverse/game-rules": "workspace:*",
     "@gameverse/shared-types": "workspace:*",
     "@notifee/react-native": "9.1.8",
     "expo": "58.0.14",
     "expo-constants": "~58.0.12",
     "expo-crypto": "~58.0.7",
     "expo-dev-client": "~58.0.14",
+    "expo-haptics": "~58.0.7",
     "expo-linking": "~58.0.13",
     "expo-notifications": "~58.1.5",
     "expo-router": "~58.0.23",
@@ -25,8 +27,11 @@
     "react": "19.3.0",
     "react-native": "0.88.0",
     "react-native-agora": "4.6.4",
+    "react-native-reanimated": "4.7.1",
     "react-native-safe-area-context": "~5.10.1",
-    "react-native-screens": "~4.30.0"
+    "react-native-screens": "~4.30.0",
+    "react-native-svg": "15.16.0",
+    "react-native-worklets": "0.13.0"
   },
   "devDependencies": {
     "@types/react": "^19.3.0",

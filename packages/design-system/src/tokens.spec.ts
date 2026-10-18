@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { contrastRatio, hexToRgb } from './contrast.js';
-import { darkColors, radii, spacing } from './tokens.js';
+import { darkColors, ludoColors, radii, spacing } from './tokens.js';
 
 const AA_NORMAL_TEXT = 4.5;
 const AA_NON_TEXT = 3;
@@ -77,5 +77,29 @@ describe('scale tokens', () => {
     expect([...spaces].sort((a, b) => a - b)).toEqual(spaces);
     const radiusValues = Object.values(radii);
     expect([...radiusValues].sort((a, b) => a - b)).toEqual(radiusValues);
+  });
+});
+
+describe('ludo board colours', () => {
+  it('has four distinct player colours, tints and nothing else in their place', () => {
+    expect(new Set(ludoColors.players).size).toBe(4);
+    expect(new Set(ludoColors.tints).size).toBe(4);
+  });
+
+  it('keeps the numeral on every token readable (4.5:1 against its fill)', () => {
+    for (const fill of ludoColors.players) {
+      expect(contrastRatio(ludoColors.tokenInk, fill)).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  it('keeps a token visible on the track and the board: its outline contrasts 3:1 with both', () => {
+    expect(contrastRatio(ludoColors.tokenInk, ludoColors.track)).toBeGreaterThanOrEqual(3);
+    for (const tint of ludoColors.tints) {
+      expect(contrastRatio(ludoColors.tokenInk, tint)).toBeGreaterThanOrEqual(3);
+    }
+  });
+
+  it('keeps the star squares visible on the track', () => {
+    expect(contrastRatio(ludoColors.star, ludoColors.track)).toBeGreaterThanOrEqual(3);
   });
 });

@@ -166,3 +166,25 @@ export const theme = {
 };
 
 export type Theme = typeof theme;
+
+/**
+ * Ludo board colours. Player colours follow the rule numbering (top-left, top-right, bottom-right,
+ * bottom-left = red, green, yellow, blue). A token is never told apart by colour alone: it carries
+ * a dark outline and its number, and the legend names each colour.
+ */
+export const ludoColors = {
+  /** Playing squares of the shared track. */
+  track: '#EEF0FF',
+  /** Outline of a square. */
+  trackLine: '#7A7FC4',
+  /** The marked star (safe) squares. */
+  star: '#2A2D6B',
+  /** Board background behind the cross. */
+  boardBackground: '#15173A',
+  /** Player colours by board colour index 0-3. */
+  players: ['#E5484D', '#2EB67D', '#F5C518', '#3E8BFF'],
+  /** Soft tints of the same colours for bases and home columns. */
+  tints: ['#F6B4B6', '#A6E3C8', '#FBE69A', '#B5D3FF'],
+  /** Outline and numeral colour on a token. */
+  tokenInk: '#0B0C24',
+} as const;

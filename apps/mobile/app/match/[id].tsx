@@ -18,6 +18,7 @@ import { useEffect, useRef } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { chat, games } from '../../src/api-client';
 import { ApiError } from '../../src/http';
+import { LudoMatch } from '../../src/ludo/LudoMatch';
 import { VoicePanel } from '../../src/VoicePanel';
 import { useAction, Body, Button, ErrorText, Loading, Title } from '../../src/ui';
 import { useMatch } from '../../src/use-match';
@@ -81,6 +82,12 @@ export default function MatchScreen() {
 
   if (!match) {
     return <View style={styles.screen}>{error ? <ErrorText error={error} /> : <Loading />}</View>;
+  }
+
+  if (match.gameId === 'ludo') {
+    return (
+      <LudoMatch match={match} apply={apply} refresh={refresh} deadlineSeconds={deadlineSeconds} />
+    );
   }
 
   const status = statusLine(match, deadlineSeconds);

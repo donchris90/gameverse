@@ -12,6 +12,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { games } from '../../src/api-client';
 import { realtime } from '../../src/realtime';
+import { LudoCard } from '../../src/ludo/LudoCard';
 import { Body, Button, ErrorText, Loading, TextField, useAction, useLoad } from '../../src/ui';
 
 const c = theme.colors;
@@ -82,21 +83,29 @@ export default function PlayTab() {
     };
   }, [reloadAll, reloadCurrent, reloadLobby, reloadQueue]);
 
-  const searching = queue.data?.state === 'searching' ? queue.data.searching : null;
+  const anySearch = queue.data?.state === 'searching' ? queue.data.searching : null;
+  const searching = anySearch?.gameId === 'tictactoe' ? anySearch : null;
   const matchedFromQueue = queue.data?.state === 'matched' ? queue.data.match : null;
 
   // Poll while searching so the bot offer and the match appear without a push.
   useEffect(() => {
-    if (!searching) return;
+    if (!anySearch) return;
     const timer = setInterval(() => {
       setTick((n) => n + 1);
       void reloadQueue();
     }, 2000);
     return () => clearInterval(timer);
-  }, [searching, reloadQueue]);
+  }, [anySearch, reloadQueue]);
 
   const resume = current.data?.match ?? matchedFromQueue;
-  const hosted: RoomView | null = lobby.data?.hosted ?? null;
+  const anyHosted: RoomView | null = lobby.data?.hosted ?? null;
+  const anyJoined: RoomView | null = lobby.data?.joined ?? null;
+  // Each game's card shows only its own rooms.
+  const hosted: RoomView | null = anyHosted?.gameId === 'tictactoe' ? anyHosted : null;
+  const ludoHosted: RoomView | null = anyHosted?.gameId === 'ludo' ? anyHosted : null;
+  const ludoJoined: RoomView | null = anyJoined?.gameId === 'ludo' ? anyJoined : null;
+  // Ludo is listed only when the server says it is playable (it hides games that are switched off).
+  const ludoListed = progress.data?.games.some((g) => g.gameId === 'ludo') ?? false;
   const invites = lobby.data?.invites ?? [];
 
   const run = (work: () => Promise<unknown>) =>
@@ -128,7 +137,8 @@ export default function PlayTab() {
           </Body>
           {progress.data.games.map((g) => (
             <Body key={g.gameId}>
-              Rating {g.rating} · {g.wins}W {g.losses}L {g.draws}D
+              {g.gameId === 'ludo' ? 'Ludo' : 'Tic-tac-toe'}: rating {g.rating} · {g.wins}W{' '}
+              {g.losses}L {g.draws}D
             </Body>
           ))}
         </Card>
@@ -196,7 +206,7 @@ export default function PlayTab() {
             <Button
               label="Find a player"
               busy={act.busy}
-              disabled={!!resume || !!hosted}
+              disabled={!!resume || !!anyHosted || !!anyJoined || !!anySearch}
               onPress={() => void run(() => games.joinQueue(game.id))}
             />
           )}
@@ -217,7 +227,7 @@ export default function PlayTab() {
             label={`Play ${level} bot`}
             tone="secondary"
             busy={act.busy}
-            disabled={!!resume || !!searching || !!hosted}
+            disabled={!!resume || !!anySearch || !!anyHosted || !!anyJoined}
             onPress={() => void start(() => games.startBot(game.id, level))}
           />
 
@@ -228,6 +238,20 @@ export default function PlayTab() {
           />
         </Card>
       ))}
+
+      {ludoListed ? (
+        <LudoCard
+          busy={act.busy}
+          blocked={!!resume || !!anySearch || !!anyHosted || !!anyJoined}
+          searching={anySearch}
+          hosted={ludoHosted}
+          joined={ludoJoined}
+          level={level}
+          setLevel={setLevel}
+          run={run}
+          start={start}
+        />
+      ) : null}
 
       <Card>
         <Heading>Play with a friend</Heading>
@@ -255,7 +279,7 @@ export default function PlayTab() {
           <Button
             label="Create a private room"
             busy={act.busy}
-            disabled={!!resume || !!searching}
+            disabled={!!resume || !!anySearch || !!anyHosted || !!anyJoined}
             onPress={() => void run(() => games.createRoom('tictactoe'))}
           />
         )}
@@ -271,8 +295,16 @@ export default function PlayTab() {
         <Button
           label="Join room"
           busy={act.busy}
-          disabled={code.trim().length !== 6 || !!resume}
-          onPress={() => void start(() => games.joinRoom(code))}
+          disabled={code.trim().length !== 6 || !!resume || !!anyJoined}
+          onPress={() =>
+            void act.run(async () => {
+              // A full table starts at once; otherwise the player now sits in the room.
+              const joinedRoom = await games.joinRoomResult(code);
+              setCode('');
+              if (joinedRoom.match) openMatch(joinedRoom.match);
+              reloadAll();
+            })
+          }
         />
         <Body muted>To invite a friend directly, open their profile from the Friends tab.</Body>
       </Card>

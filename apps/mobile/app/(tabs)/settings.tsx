@@ -9,6 +9,7 @@ import { Link, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { accountApi, me } from '../../src/api-client';
+import { setReduceMotionChoice, useReduceMotion } from '../../src/ludo/motion';
 import { registerForPush, type PushRegistration } from '../../src/push';
 import { useReadySession, useSession } from '../../src/session';
 import { Avatar, Body, Button, ErrorText, Loading, Screen, useAction, useLoad } from '../../src/ui';
@@ -17,6 +18,9 @@ const LABELS: Record<string, string> = {
   EVERYONE: 'Everyone',
   FRIENDS: 'Friends',
   NOBODY: 'Nobody',
+  AUTO: 'Follow phone',
+  FULL: 'Full',
+  REDUCED: 'Reduced',
 };
 
 function Choice<T extends string>(props: {
@@ -71,6 +75,7 @@ export default function Settings() {
   const { profile, user } = useReadySession();
   const { signOut } = useSession();
   const router = useRouter();
+  const motion = useReduceMotion();
   const load = useCallback(() => me.settings(), []);
   const { data: settings, setData, error, loading } = useLoad(load);
   const save = useAction();
@@ -158,6 +163,16 @@ export default function Settings() {
               value={settings.onlineStatusVisibility}
               onChange={(value) => change({ onlineStatusVisibility: value })}
               disabled={save.busy}
+            />
+            <Choice
+              title="Game animations"
+              hint="Reduced skips token hopping and pulsing in Ludo. Try it if the game feels slow."
+              options={['AUTO', 'FULL', 'REDUCED'] as const}
+              value={motion.choice === null ? 'AUTO' : motion.choice ? 'REDUCED' : 'FULL'}
+              onChange={(value) =>
+                void setReduceMotionChoice(value === 'AUTO' ? null : value === 'REDUCED')
+              }
+              disabled={false}
             />
             <Choice
               title="Who can message me"

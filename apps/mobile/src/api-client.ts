@@ -117,6 +117,16 @@ export const games = {
     request<MatchView>('POST', matchPath(id, 'moves'), {
       body: { cell, clientActionId, expectedVersion },
     }),
+  /** Ludo: the server rolls the die. There is no value to send. */
+  roll: (id: string, clientActionId: string, expectedVersion: number) =>
+    request<MatchView>('POST', matchPath(id, 'roll'), {
+      body: { clientActionId, expectedVersion },
+    }),
+  /** Ludo: move one of my tokens by the die I rolled. */
+  moveToken: (id: string, token: number, clientActionId: string, expectedVersion: number) =>
+    request<MatchView>('POST', matchPath(id, 'token-moves'), {
+      body: { token, clientActionId, expectedVersion },
+    }),
   leave: (id: string) => request<MatchView>('POST', matchPath(id, 'leave'), { body: {} }),
   rematch: (id: string) => request<MatchView>('POST', matchPath(id, 'rematch'), { body: {} }),
   startBot: (gameId: GameId, level: BotLevelName, players?: number) =>

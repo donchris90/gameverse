@@ -11,6 +11,7 @@ export * from './matches.js';
 export * from './lobby.js';
 export * from './progress.js';
 export * from './match-ui.js';
+export * from './ludo-ui.js';
 export * from './voice.js';
 export * from './voice-ui.js';
 export * from './voice-controller.js';

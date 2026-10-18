@@ -18,32 +18,36 @@ const s = theme.spacing;
  */
 export function VoicePanel({ match }: { match: MatchView }) {
   const me = match.players.find((player) => player.seat === match.mySeat);
-  const opponent = match.players.find((player) => player.seat !== match.mySeat);
+  // Everyone else who is a person (bots have no voice). A Ludo table can have up to three.
+  const others = match.players.flatMap((player) =>
+    player.seat !== match.mySeat && player.userId !== null && !player.out
+      ? [{ userId: player.userId, username: player.username }]
+      : [],
+  );
   const open = ['WAITING', 'READY', 'ACTIVE'].includes(match.status);
   const { controller, state } = useVoice(match.id, open);
-  const [reporting, setReporting] = useState(false);
+  const [reporting, setReporting] = useState<{ userId: string; username: string } | null>(null);
   const act = useAction();
 
   // Bots have no voice, and a finished match has nothing to join.
-  if (!me?.userId || !opponent?.userId || !open) return null;
-  const opponentId = opponent.userId;
+  if (!me?.userId || others.length === 0 || !open) return null;
   const active = isVoiceActive(state);
   const rows = voiceRows(state, me.userId);
 
   if (reporting) {
     return (
       <ReportPanel
-        userId={opponentId}
-        username={opponent.username}
+        userId={reporting.userId}
+        username={reporting.username}
         context="voice"
-        onClose={() => setReporting(false)}
+        onClose={() => setReporting(null)}
       />
     );
   }
 
-  const block = () =>
+  const block = (other: { userId: string; username: string }) =>
     Alert.alert(
-      `Block ${opponent.username}?`,
+      `Block ${other.username}?`,
       'Voice ends now and you will not see each other in games or chat.',
       [
         { text: 'Cancel', style: 'cancel' },
@@ -53,7 +57,7 @@ export function VoicePanel({ match }: { match: MatchView }) {
           onPress: () =>
             void act.run(async () => {
               await controller.leave();
-              await social.block(opponentId);
+              await social.block(other.userId);
             }),
         },
       ],
@@ -117,8 +121,21 @@ export function VoicePanel({ match }: { match: MatchView }) {
 
       <ErrorText error={act.error} />
       <View style={styles.safety}>
-        <Button label="Report player" tone="secondary" onPress={() => setReporting(true)} />
-        <Button label="Block player" tone="danger" busy={act.busy} onPress={block} />
+        {others.map((other) => (
+          <View key={other.userId}>
+            <Button
+              label={others.length === 1 ? 'Report player' : `Report ${other.username}`}
+              tone="secondary"
+              onPress={() => setReporting(other)}
+            />
+            <Button
+              label={others.length === 1 ? 'Block player' : `Block ${other.username}`}
+              tone="danger"
+              busy={act.busy}
+              onPress={() => block(other)}
+            />
+          </View>
+        ))}
       </View>
     </View>
   );
