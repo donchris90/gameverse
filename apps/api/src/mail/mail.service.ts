@@ -51,7 +51,7 @@ export class MailService {
       text: [
         'We received a request to permanently delete your GameVerse account.',
         '',
-        'To confirm, open this link while signed in to the app:',
+        'To confirm, open this link on your phone (in the app, or on the web page it opens):',
         link,
         '',
         'Deleting your account removes your profile, friends, chats and sign-in details. This cannot',

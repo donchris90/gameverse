@@ -1,0 +1,20 @@
+appId: com.gameverse.app.dev
+---
+- launchApp:
+    clearState: true
+- runFlow:
+    file: subflows/sign-in.yaml
+- tapOn: Resume match
+- scrollUntilVisible:
+    element: Join voice
+- tapOn: Join voice
+- tapOn:
+    text: Allow
+    optional: true
+- assertVisible: Leave voice
+- tapOn: Mute
+- assertVisible: Unmute
+- tapOn: Unmute
+- assertVisible: Mute
+- tapOn: Leave voice
+- assertVisible: Join voice

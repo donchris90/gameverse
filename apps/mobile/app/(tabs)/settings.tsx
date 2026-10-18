@@ -9,6 +9,7 @@ import { Link, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { accountApi, me } from '../../src/api-client';
+import { LegalLinks } from '../../src/LegalLinks';
 import { setReduceMotionChoice, useReduceMotion } from '../../src/ludo/motion';
 import { registerForPush, type PushRegistration } from '../../src/push';
 import { useReadySession, useSession } from '../../src/session';
@@ -214,6 +215,7 @@ export default function Settings() {
         >
           Account
         </Text>
+        <LegalLinks />
         <Button label="Sign out" tone="secondary" onPress={() => void signOut()} />
         <ErrorText error={deletion.error} />
         {deletionNote ? (

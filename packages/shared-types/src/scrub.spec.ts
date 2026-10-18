@@ -22,22 +22,24 @@ describe('scrubText', () => {
 });
 
 describe('scrubEvent', () => {
-  const event = (): ScrubbableEvent & Record<string, unknown> => ({
-    message: 'failed for jude@example.com',
-    server_name: 'render-host-1',
-    request: {
-      method: 'POST',
-      url: 'https://api.example.com/v1/auth/login?token=secretsecretsecretsecretsecretsecretsecret',
-      headers: { authorization: `Bearer ${JWT}`, cookie: 'a=b' },
-      cookies: { a: 'b' },
-      data: { email: 'jude@example.com', password: 'hunter2' },
-      query_string: 'token=abc',
-    },
-    user: { id: 'u1', email: 'jude@example.com', ip_address: '1.2.3.4', username: 'jude' },
-    exception: { values: [{ type: 'Error', value: `bad token ${JWT}` }] },
-    breadcrumbs: [{ message: 'login jude@example.com', data: { body: 'password=hunter2' } }],
-    extra: { note: 'jude@example.com', blob: { password: 'hunter2' } },
-  });
+  // Real events carry far more than the typed subset; the fixture does too, hence the cast.
+  const event = (): ScrubbableEvent & Record<string, unknown> =>
+    ({
+      message: 'failed for jude@example.com',
+      server_name: 'render-host-1',
+      request: {
+        method: 'POST',
+        url: 'https://api.example.com/v1/auth/login?token=secretsecretsecretsecretsecretsecretsecret',
+        headers: { authorization: `Bearer ${JWT}`, cookie: 'a=b' },
+        cookies: { a: 'b' },
+        data: { email: 'jude@example.com', password: 'hunter2' },
+        query_string: 'token=abc',
+      },
+      user: { id: 'u1', email: 'jude@example.com', ip_address: '1.2.3.4', username: 'jude' },
+      exception: { values: [{ type: 'Error', value: `bad token ${JWT}` }] },
+      breadcrumbs: [{ message: 'login jude@example.com', data: { body: 'password=hunter2' } }],
+      extra: { note: 'jude@example.com', blob: { password: 'hunter2' } },
+    }) as unknown as ScrubbableEvent & Record<string, unknown>;
 
   it('keeps only what is needed to debug: stack, route, method, account id', () => {
     const out = scrubEvent(event());

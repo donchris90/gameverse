@@ -1,0 +1,45 @@
+# Register -> choose a username -> land on the app -> sign out -> sign back in -> sign out.
+# Needs: a build of the app pointing at a scratch API (EXPO_PUBLIC_API_URL), env API_URL not required.
+appId: com.gameverse.app.dev
+env:
+  PASSWORD: correct-horse-battery-staple
+---
+- clearState
+- launchApp
+- evalScript: ${output.suffix = String(Date.now()).slice(-8)}
+- evalScript: ${output.email = 'maestro-' + output.suffix + '@example.com'}
+- evalScript: ${output.username = 'maestro' + output.suffix}
+- assertVisible: GameVerse
+- tapOn: New here? Create an account
+- tapOn: Email
+- inputText: ${output.email}
+- tapOn:
+    text: Password.*
+- inputText: ${PASSWORD}
+- tapOn: Date of birth.*
+- inputText: '1995-01-01'
+- hideKeyboard
+- tapOn: I accept the Terms and Privacy Policy
+- tapOn: Create account
+- assertVisible: Pick a username
+- tapOn: Username
+- inputText: ${output.username}
+- hideKeyboard
+- tapOn: Continue
+- assertVisible: Play
+- tapOn: Settings
+- scrollUntilVisible:
+    element: Sign out
+- tapOn: Sign out
+- assertVisible: Sign in to play with friends.
+- runFlow:
+    file: subflows/sign-in.yaml
+    env:
+      EMAIL: ${output.email}
+      PASSWORD: ${PASSWORD}
+- assertVisible: Play
+- tapOn: Settings
+- scrollUntilVisible:
+    element: Sign out
+- tapOn: Sign out
+- assertVisible: Sign in to play with friends.

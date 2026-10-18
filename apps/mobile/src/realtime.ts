@@ -1,4 +1,4 @@
-import type { RealtimeEvent } from '@gameverse/shared-types';
+import { reconnectDelayMs, type RealtimeEvent } from '@gameverse/shared-types';
 import { API_URL, freshAccessToken } from './http';
 
 type Listener = (event: RealtimeEvent) => void;
@@ -118,7 +118,7 @@ class RealtimeClient {
   private scheduleRetry(): void {
     if (!this.wanted || this.retryTimer) return;
     this.attempts += 1;
-    const delay = Math.min(MAX_BACKOFF_MS, 1000 * 2 ** Math.min(this.attempts, 5));
+    const delay = reconnectDelayMs(this.attempts, Math.random, MAX_BACKOFF_MS);
     this.retryTimer = setTimeout(() => {
       this.retryTimer = null;
       void this.open();

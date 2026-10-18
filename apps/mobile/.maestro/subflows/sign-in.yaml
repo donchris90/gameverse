@@ -1,0 +1,9 @@
+# Signs in with env EMAIL and PASSWORD. Expects the sign-in screen.
+appId: com.gameverse.app.dev
+---
+- tapOn: Email
+- inputText: ${EMAIL}
+- tapOn: Password
+- inputText: ${PASSWORD}
+- hideKeyboard
+- tapOn: Sign in

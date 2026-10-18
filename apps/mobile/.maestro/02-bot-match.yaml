@@ -1,0 +1,43 @@
+# Registers, then plays a labelled practice match against the easy bot until the series ends.
+# The bot must be clearly labelled; the flow asserts the word "Bot" is on screen.
+appId: com.gameverse.app.dev
+env:
+  PASSWORD: correct-horse-battery-staple
+---
+- clearState
+- launchApp
+- evalScript: ${output.suffix = String(Date.now()).slice(-8)}
+- tapOn: New here? Create an account
+- tapOn: Email
+- inputText: maestro-${output.suffix}@example.com
+- tapOn:
+    text: Password.*
+- inputText: ${PASSWORD}
+- tapOn: Date of birth.*
+- inputText: '1995-01-01'
+- hideKeyboard
+- tapOn: I accept the Terms and Privacy Policy
+- tapOn: Create account
+- tapOn: Username
+- inputText: bm${output.suffix}
+- hideKeyboard
+- tapOn: Continue
+- assertVisible: Play
+- tapOn: easy
+- tapOn: Play easy bot
+- assertVisible: .*Bot.*
+- tapOn: Ready
+- repeat:
+    times: 60
+    commands:
+      - runFlow:
+          when:
+            notVisible: You won the match!|You lost the match|The match is a draw
+          commands:
+            - tapOn:
+                text: Cell [1-9], empty
+                optional: true
+            - waitForAnimationToEnd:
+                timeout: 1500
+- assertVisible: You won the match!|You lost the match|The match is a draw
+- assertVisible: Rematch

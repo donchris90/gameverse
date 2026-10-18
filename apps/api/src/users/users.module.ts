@@ -9,5 +9,6 @@ import { UsersController } from './users.controller.js';
   imports: [AuthModule, MailModule],
   controllers: [UsersController, AccountController],
   providers: [AccountService],
+  exports: [AccountService],
 })
 export class UsersModule {}

@@ -1,0 +1,7 @@
+# Maestro workspace config. Run from apps/mobile:
+#   maestro test -e API_URL=https://<your api> .maestro/01-auth.yaml
+# See README.md for what each flow needs. None of these has been run yet.
+flows:
+  - 01-auth.yaml
+  - 02-bot-match.yaml
+  - 03-friends-chat.yaml

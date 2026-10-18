@@ -9,7 +9,14 @@ export function configureApp(app: NestExpressApplication, config: AppConfig): vo
 
   // Versioned API; probes stay at /health/* and the email-link landing pages at their own paths.
   app.setGlobalPrefix('v1', {
-    exclude: ['health/live', 'health/ready', 'verify-email', 'reset-password', 'delete-account'],
+    exclude: [
+      'health/live',
+      'health/ready',
+      'verify-email',
+      'reset-password',
+      'delete-account',
+      'account-deletion',
+    ],
   });
 
   // Only trust X-Forwarded-* when explicitly running behind a known proxy; otherwise clients could
@@ -19,5 +26,7 @@ export function configureApp(app: NestExpressApplication, config: AppConfig): vo
   app.use(helmet());
   app.enableCors({ origin: config.CORS_ORIGINS.length > 0 ? config.CORS_ORIGINS : false });
   app.useBodyParser('json', { limit: '100kb' });
+  // Only the two small web forms (account deletion) post form-encoded bodies.
+  app.useBodyParser('urlencoded', { extended: false, limit: '4kb' });
   app.enableShutdownHooks();
 }

@@ -35,7 +35,7 @@ describe('SentryErrorReporter (real SDK, fake transport)', () => {
       route: 'POST /v1/matches/:id/moves',
       userId: 'user-1',
     });
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    await reporter.flush(); // waits until queued events have gone through the transport
     const text = JSON.stringify(sent);
     expect(text).toContain('req-1');
     expect(text).toContain('POST /v1/matches/:id/moves');

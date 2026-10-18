@@ -42,7 +42,38 @@ export class AccountService {
       select: { id: true, email: true, status: true },
     });
     this.requireDeletable(user.status);
+    if (await this.recentlyRequested(userId, now)) {
+      throw new AppException(
+        HttpStatus.TOO_MANY_REQUESTS,
+        ErrorCode.VERIFICATION_TOO_SOON,
+        'Please wait a minute before requesting another link',
+      );
+    }
+    await this.issueLink(user, now);
+    return { message: 'We emailed you a link to confirm deleting your account' };
+  }
 
+  /**
+   * The same request without the app, for the public web page (Google Play requires a way to ask
+   * for deletion that does not need the app installed). Answers identically whether or not the
+   * address belongs to an account, so it cannot be used to find out who has one. Whoever controls
+   * the mailbox controls the account already (password reset), so the emailed link is enough.
+   */
+  async requestDeletionByEmail(email: string, now: Date = new Date()): Promise<void> {
+    const user = await this.prisma.user.findUnique({
+      where: { email: email.trim().toLowerCase() },
+      select: { id: true, email: true, status: true },
+    });
+    if (!user || user.status !== 'ACTIVE') return;
+    if (await this.recentlyRequested(user.id, now)) return;
+    try {
+      await this.issueLink(user, now);
+    } catch {
+      // Same answer either way; the person can ask again.
+    }
+  }
+
+  private async recentlyRequested(userId: string, now: Date): Promise<boolean> {
     const recent = await this.prisma.oneTimeToken.findFirst({
       where: {
         userId,
@@ -51,14 +82,11 @@ export class AccountService {
       },
       select: { id: true },
     });
-    if (recent) {
-      throw new AppException(
-        HttpStatus.TOO_MANY_REQUESTS,
-        ErrorCode.VERIFICATION_TOO_SOON,
-        'Please wait a minute before requesting another link',
-      );
-    }
+    return recent !== null;
+  }
 
+  private async issueLink(user: { id: string; email: string }, now: Date): Promise<void> {
+    const userId = user.id;
     const { raw, hash } = this.tokens.generateOpaqueToken();
     const [, created] = await this.prisma.$transaction([
       this.prisma.oneTimeToken.deleteMany({
@@ -85,7 +113,6 @@ export class AccountService {
         'We could not send the email right now. Please try again in a few minutes.',
       );
     }
-    return { message: 'We emailed you a link to confirm deleting your account' };
   }
 
   async confirmDeletion(userId: string, rawToken: string, now: Date = new Date()): Promise<void> {
@@ -103,9 +130,24 @@ export class AccountService {
       throw invalidToken();
     }
 
+    await this.erase(token.id, userId, now);
+  }
+
+  /** Confirmation from the web page: the emailed link alone identifies the account. */
+  async confirmDeletionByToken(rawToken: string, now: Date = new Date()): Promise<void> {
+    const token = await this.prisma.oneTimeToken.findUnique({
+      where: { tokenHash: this.tokens.hashOpaqueToken(rawToken) },
+    });
+    if (!token || token.type !== 'ACCOUNT_DELETION' || token.usedAt || token.expiresAt <= now) {
+      throw invalidToken();
+    }
+    await this.erase(token.id, token.userId, now);
+  }
+
+  private async erase(tokenId: string, userId: string, now: Date): Promise<void> {
     await this.prisma.$transaction(async (tx) => {
       const claimed = await tx.oneTimeToken.updateMany({
-        where: { id: token.id, usedAt: null },
+        where: { id: tokenId, usedAt: null },
         data: { usedAt: now },
       });
       if (claimed.count !== 1) throw invalidToken();

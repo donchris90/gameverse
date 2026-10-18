@@ -4,14 +4,14 @@ Script: `apps/api/scripts/db-rehearsal.sh` (needs `pnpm build` first). It uses t
 
 ## Result of the run on 2026-10-18 (local PostgreSQL 16, one machine)
 
-| Step | Result |
-| --- | --- |
-| Apply all 13 migrations to an empty database | Clean, 1.2 s, 29 tables, `ON_ERROR_STOP` on |
+| Step                                                                                                     | Result                                             |
+| -------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| Apply all 13 migrations to an empty database                                                             | Clean, 1.2 s, 29 tables, `ON_ERROR_STOP` on        |
 | Play real matches through the compiled `dist/` API (6 tic-tac-toe pairs x 2 matches, 3 Ludo tables of 4) | Ran; rows landed in 14 tables, 1,620 rows in total |
-| `pg_dump --format=custom` | 0.2 s, 148 KB |
-| `pg_restore --exit-on-error` into a second empty database | 0.4 s, no errors |
-| Compare every table: row count and an md5 of all rows | Identical for all tables |
-| Boot the compiled API on the restored database | `/health/ready` OK |
+| `pg_dump --format=custom`                                                                                | 0.2 s, 148 KB                                      |
+| `pg_restore --exit-on-error` into a second empty database                                                | 0.4 s, no errors                                   |
+| Compare every table: row count and an md5 of all rows                                                    | Identical for all tables                           |
+| Boot the compiled API on the restored database                                                           | `/health/ready` OK                                 |
 
 ## What this does and does not prove
 

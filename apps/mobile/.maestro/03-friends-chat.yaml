@@ -1,0 +1,45 @@
+# A second account (created over HTTP) sends the device user a friend request; the device user
+# accepts, opens the chat, sends a message, receives a reply pushed over the WebSocket.
+# Run with: maestro test -e API_URL=https://<api> .maestro/03-friends-chat.yaml
+appId: com.gameverse.app.dev
+env:
+  PASSWORD: correct-horse-battery-staple
+---
+- clearState
+- launchApp
+- evalScript: ${output.suffix = String(Date.now()).slice(-8)}
+- tapOn: New here? Create an account
+- tapOn: Email
+- inputText: maestro-${output.suffix}@example.com
+- tapOn:
+    text: Password.*
+- inputText: ${PASSWORD}
+- tapOn: Date of birth.*
+- inputText: '1995-01-01'
+- hideKeyboard
+- tapOn: I accept the Terms and Privacy Policy
+- tapOn: Create account
+- tapOn: Username
+- inputText: fc${output.suffix}
+- hideKeyboard
+- tapOn: Continue
+- runScript:
+    file: scripts/seed-friend.js
+    env:
+      TARGET_USERNAME: fc${output.suffix}
+- tapOn: Friends
+- assertVisible: .*rival.*
+- tapOn: Accept
+- tapOn:
+    text: Open rival.*profile
+- tapOn: Message
+- inputText: hello rival
+- tapOn: Send message
+- assertVisible: hello rival
+- runScript:
+    file: scripts/rival-reply.js
+    env:
+      RIVAL_TOKEN: ${output.rivalToken}
+- assertVisible:
+    text: hello from the rival
+    timeout: 10000

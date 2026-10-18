@@ -15,6 +15,9 @@ const UNPREFIXED = new Set([
   'GET /verify-email',
   'GET /reset-password',
   'GET /delete-account',
+  'POST /delete-account',
+  'GET /account-deletion',
+  'POST /account-deletion',
 ]);
 
 const join = (...parts: string[]) =>

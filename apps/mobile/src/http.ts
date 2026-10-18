@@ -5,6 +5,10 @@ export const API_URL = (process.env['EXPO_PUBLIC_API_URL'] ?? 'http://localhost:
   /\/+$/,
   '',
 );
+// A release build that still points at this machine was built without EXPO_PUBLIC_API_URL.
+if (!__DEV__ && /^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/.test(API_URL)) {
+  throw new Error('EXPO_PUBLIC_API_URL must be set for release builds');
+}
 const REFRESH_KEY = 'gv.refreshToken';
 
 export class ApiError extends Error {

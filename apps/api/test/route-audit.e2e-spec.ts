@@ -10,6 +10,9 @@ const PUBLIC_ROUTES = [
   'GET /verify-email',
   'GET /reset-password',
   'GET /delete-account',
+  'POST /delete-account', // the emailed one-time token is the credential
+  'GET /account-deletion',
+  'POST /account-deletion', // answers identically for any address
   'POST /v1/auth/forgot-password',
   'POST /v1/auth/login',
   'POST /v1/auth/logout', // credential is the refresh token in the body

@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import { theme } from '@gameverse/design-system';
 import { ApiError } from '../../src/http';
+import { LegalLinks } from '../../src/LegalLinks';
 import { useSession } from '../../src/session';
 import { Body, Button, ErrorText, Screen, TextField, Title, useAction } from '../../src/ui';
 
@@ -95,6 +96,7 @@ export default function Register() {
               I accept the Terms and Privacy Policy
             </Text>
           </Pressable>
+          <LegalLinks only={['Privacy policy', 'Terms of service']} />
           <ErrorText
             error={
               error instanceof ApiError && error.code === 'UNDER_MINIMUM_AGE'

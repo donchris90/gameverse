@@ -255,4 +255,94 @@ describe('account deletion', () => {
       .send({ token: 'y'.repeat(43) });
     expect([400, 401, 403]).toContain(reused.status);
   });
+
+  describe('without the app (public web pages)', () => {
+    const ask = (email: string) =>
+      request(t.server).post('/account-deletion').type('form').send({ email });
+    const confirmOnWeb = (token: string) =>
+      request(t.server).post('/delete-account').type('form').send({ token });
+
+    it('the request page is public and explains what is deleted and what is kept', async () => {
+      const page = await request(t.server).get('/account-deletion').expect(200);
+      expect(page.text).toContain('Delete your GameVerse account');
+      expect(page.text).toContain('name="email"');
+      expect(page.text).toMatch(/reports and moderation records are kept/i);
+      expect(page.headers['content-security-policy']).toContain("form-action 'self'");
+    });
+
+    it('emailing the link, then confirming on the web, deletes the account with no sign-in', async () => {
+      const user = await registerWithProfile(t);
+      const friend = await registerWithProfile(t);
+      await befriend(t, user, friend);
+      const reply = await ask(user.email).expect(200);
+      expect(reply.text).toContain('Check your email');
+      const token = tokenFromLastEmail(t, user.email);
+
+      const landing = await request(t.server)
+        .get(`/delete-account?token=${encodeURIComponent(token)}`)
+        .expect(200);
+      expect(landing.text).toContain('action="/delete-account"');
+      expect(landing.text).toContain('Delete my account');
+
+      const done = await confirmOnWeb(token).expect(200);
+      expect(done.text).toContain('Account deleted');
+      expect(await t.prisma.user.findUniqueOrThrow({ where: { id: user.id } })).toMatchObject({
+        status: 'DELETED',
+        passwordHash: null,
+      });
+      await request(t.server).get('/v1/me').set(user.auth).expect(403);
+      // The link is single use.
+      await confirmOnWeb(token).expect(400);
+    });
+
+    it('gives the same answer for an unknown address and sends nothing', async () => {
+      const known = await registerWithProfile(t);
+      const asked = await ask(known.email).expect(200);
+      const unknown = await ask('nobody-here@example.com').expect(200);
+      expect(unknown.text).toBe(asked.text);
+      expect(t.email.last('nobody-here@example.com')).toBeUndefined();
+      const garbage = await ask('not-an-email').expect(200);
+      expect(garbage.text).toBe(asked.text);
+    });
+
+    it('does not mail a second link inside the cooldown, and never for banned accounts', async () => {
+      const user = await registerWithProfile(t);
+      await ask(user.email).expect(200);
+      const first = t.email.last(user.email)?.text;
+      await ask(user.email).expect(200);
+      expect(t.email.last(user.email)?.text).toBe(first);
+
+      const banned = await registerWithProfile(t);
+      await t.prisma.user.update({ where: { id: banned.id }, data: { status: 'BANNED' } });
+      await ask(banned.email).expect(200);
+      expect(t.email.last(banned.email)?.subject ?? '').not.toMatch(/delet/i);
+    });
+
+    it('rejects malformed, unknown, expired and wrong-type tokens', async () => {
+      await confirmOnWeb('short').expect(400);
+      await confirmOnWeb('A'.repeat(43)).expect(400);
+      const user = await registerWithProfile(t);
+      await ask(user.email).expect(200);
+      const token = tokenFromLastEmail(t, user.email);
+      await t.prisma.oneTimeToken.updateMany({
+        where: { userId: user.id },
+        data: { expiresAt: new Date(Date.now() - 1000) },
+      });
+      await confirmOnWeb(token).expect(400);
+      expect((await t.prisma.user.findUniqueOrThrow({ where: { id: user.id } })).status).toBe(
+        'ACTIVE',
+      );
+    });
+
+    it('a banned account cannot be erased by a token that already existed', async () => {
+      const user = await registerWithProfile(t);
+      await ask(user.email).expect(200);
+      const token = tokenFromLastEmail(t, user.email);
+      await t.prisma.user.update({ where: { id: user.id }, data: { status: 'BANNED' } });
+      await confirmOnWeb(token).expect(409);
+      expect((await t.prisma.user.findUniqueOrThrow({ where: { id: user.id } })).status).toBe(
+        'BANNED',
+      );
+    });
+  });
 });
