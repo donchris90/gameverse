@@ -83,15 +83,16 @@ model User {
 
   deviceTokens DeviceToken[]
 
-  gameSeats     GameMatchPlayer[]
-  resultSeats   GameResultPlayer[] @relation("ResultPlayerUser")
-  ratings       PlayerRating[]     @relation("PlayerRatingUser")
-  statistics    PlayerStatistics[] @relation("PlayerStatisticsUser")
-  experience    PlayerExperience?  @relation("PlayerExperienceUser")
-  hostedRooms   GameRoom[]         @relation("RoomHost")
-  roomInvites   GameRoom[]         @relation("RoomInvitee")
-  queueEntry    MatchQueueEntry?   @relation("QueueUser")
-  voiceSessions VoiceSession[]
+  gameSeats       GameMatchPlayer[]
+  resultSeats     GameResultPlayer[] @relation("ResultPlayerUser")
+  ratings         PlayerRating[]     @relation("PlayerRatingUser")
+  statistics      PlayerStatistics[] @relation("PlayerStatisticsUser")
+  experience      PlayerExperience?  @relation("PlayerExperienceUser")
+  hostedRooms     GameRoom[]         @relation("RoomHost")
+  roomInvites     GameRoom[]         @relation("RoomInvitee")
+  queueEntry      MatchQueueEntry?   @relation("QueueUser")
+  roomMemberships GameRoomMember[]   @relation("RoomMemberUser")
+  voiceSessions   VoiceSession[]
 
   @@index([status])
   @@map("users")
@@ -577,19 +578,37 @@ model GameRoom {
   hostId        String     @db.Uuid
   /// Set for a friend invite: only this user can join.
   invitedUserId String?    @db.Uuid
+  /// Players the game starts with when the room is full: 2 for tic-tac-toe, 2 to 4 for Ludo.
+  seats         Int        @default(2)
   status        RoomStatus @default(OPEN)
   expiresAt     DateTime   @db.Timestamptz(3)
   matchId       String?    @unique @db.Uuid
   createdAt     DateTime   @default(now()) @db.Timestamptz(3)
   respondedAt   DateTime?  @db.Timestamptz(3)
 
-  host        User  @relation("RoomHost", fields: [hostId], references: [id], onDelete: Cascade)
-  invitedUser User? @relation("RoomInvitee", fields: [invitedUserId], references: [id], onDelete: Cascade)
+  host        User             @relation("RoomHost", fields: [hostId], references: [id], onDelete: Cascade)
+  invitedUser User?            @relation("RoomInvitee", fields: [invitedUserId], references: [id], onDelete: Cascade)
+  members     GameRoomMember[]
 
   @@index([hostId, status])
   @@index([invitedUserId, status])
   @@index([status, expiresAt])
   @@map("game_rooms")
+}
+
+/// A guest who joined a private room with the code, before the match starts. The host is not a member.
+model GameRoomMember {
+  id       String   @id @default(uuid(7)) @db.Uuid
+  roomId   String   @db.Uuid
+  userId   String   @db.Uuid
+  joinedAt DateTime @default(now()) @db.Timestamptz(3)
+
+  room GameRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user User     @relation("RoomMemberUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([roomId, userId])
+  @@index([userId])
+  @@map("game_room_members")
 }
 
 /// A player waiting for a quick match. One row per user (unique), deleted when matched, cancelled
@@ -600,6 +619,8 @@ model MatchQueueEntry {
   gameId   String
   /// Skill rating captured when the search started (1000 until ratings exist in slice 2F).
   rating   Int
+  /// How many players the searcher wants in the match (2 for tic-tac-toe, 2 to 4 for Ludo).
+  seats    Int      @default(2)
   joinedAt DateTime @default(now()) @db.Timestamptz(3)
 
   user User @relation("QueueUser", fields: [userId], references: [id], onDelete: Cascade)

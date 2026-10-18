@@ -11,7 +11,7 @@ import {
   DEFAULT_RATING,
   QUEUE_BOT_OFFER_AFTER_MS,
   QUEUE_TTL_MS,
-  pickPartner,
+  pickGroup,
   ratingBand,
   type Waiting,
 } from './matchmaking.policy.js';
@@ -43,6 +43,7 @@ export class MatchmakingService {
         state: 'searching',
         searching: {
           gameId: entry.gameId as GameId,
+          players: entry.seats,
           joinedAt: entry.joinedAt.toISOString(),
           waitedMs,
           ratingBand: ratingBand(waitedMs),
@@ -62,11 +63,23 @@ export class MatchmakingService {
   // -------------------------------------------------------------------- join
 
   /** Joining twice is harmless: the second call just reports the search already running. */
-  async join(userId: string, gameId: GameId, now: Date = new Date()): Promise<MatchmakingStatus> {
+  async join(
+    userId: string,
+    gameId: GameId,
+    players = 2,
+    now: Date = new Date(),
+  ): Promise<MatchmakingStatus> {
     const matchId = await runSerializable(this.prisma, async (tx) => {
       const game = await tx.game.findUnique({ where: { id: gameId } });
       if (!game || !game.enabled) {
         throw new AppException(HttpStatus.NOT_FOUND, ErrorCode.NOT_FOUND, 'Game not found');
+      }
+      if (players < game.minPlayers || players > game.maxPlayers) {
+        throw new AppException(
+          HttpStatus.BAD_REQUEST,
+          ErrorCode.VALIDATION_FAILED,
+          `This game is for ${game.minPlayers === game.maxPlayers ? game.minPlayers : `${game.minPlayers} to ${game.maxPlayers}`} players`,
+        );
       }
       const user = await tx.user.findUnique({
         where: { id: userId },
@@ -81,7 +94,7 @@ export class MatchmakingService {
       }
       const existing = await tx.matchQueueEntry.findUnique({ where: { userId } });
       if (existing !== null) {
-        if (existing.gameId !== gameId) {
+        if (existing.gameId !== gameId || existing.seats !== players) {
           throw new AppException(
             HttpStatus.CONFLICT,
             ErrorCode.ALREADY_QUEUED,
@@ -112,8 +125,24 @@ export class MatchmakingService {
           'Close your open room before searching for a match',
         );
       }
+      const joinedRoom = await tx.gameRoomMember.count({
+        where: { userId, room: { status: 'OPEN', expiresAt: { gt: now } } },
+      });
+      if (joinedRoom > 0) {
+        throw new AppException(
+          HttpStatus.CONFLICT,
+          ErrorCode.INVALID_STATE,
+          'Leave your room before searching for a match',
+        );
+      }
       const entry = await tx.matchQueueEntry.create({
-        data: { userId, gameId, rating: await this.ratingOf(tx, userId, gameId), joinedAt: now },
+        data: {
+          userId,
+          gameId,
+          seats: players,
+          rating: await this.ratingOf(tx, userId, gameId),
+          joinedAt: now,
+        },
       });
       return this.tryPair(tx, entry, now);
     });
@@ -137,6 +166,7 @@ export class MatchmakingService {
     const others = await tx.matchQueueEntry.findMany({
       where: {
         gameId: entry.gameId,
+        seats: entry.seats,
         userId: { not: entry.userId },
         joinedAt: { gt: new Date(now.getTime() - QUEUE_TTL_MS) },
       },
@@ -146,18 +176,18 @@ export class MatchmakingService {
     if (others.length === 0) return null;
 
     const otherIds = others.map((other) => other.userId);
+    const everyone = [entry.userId, ...otherIds];
     const blocks = await tx.blockedUser.findMany({
-      where: {
-        OR: [
-          { blockerId: entry.userId, blockedId: { in: otherIds } },
-          { blockedId: entry.userId, blockerId: { in: otherIds } },
-        ],
-      },
+      where: { blockerId: { in: everyone }, blockedId: { in: everyone } },
       select: { blockerId: true, blockedId: true },
     });
-    const blocked = new Set(
-      blocks.map((block) => (block.blockerId === entry.userId ? block.blockedId : block.blockerId)),
+    const blockedPairs = new Set(
+      blocks.flatMap((block) => [
+        `${block.blockerId}:${block.blockedId}`,
+        `${block.blockedId}:${block.blockerId}`,
+      ]),
     );
+    const conflicts = (a: string, b: string) => blockedPairs.has(`${a}:${b}`);
     const busy = await tx.gameMatchPlayer.findMany({
       where: {
         userId: { in: otherIds },
@@ -167,29 +197,24 @@ export class MatchmakingService {
       select: { userId: true },
     });
     const inMatch = new Set(busy.map((row) => row.userId));
-    const eligible = others.filter(
-      (other) => !blocked.has(other.userId) && !inMatch.has(other.userId),
-    );
+    const eligible = others.filter((other) => !inMatch.has(other.userId));
 
-    const partner = pickPartner(waiting(entry), eligible.map(waiting), now);
-    if (partner === null) return null;
-    const partnerEntry = eligible.find((other) => other.userId === partner.userId);
-    if (!partnerEntry) return null;
+    const group = pickGroup(waiting(entry), eligible.map(waiting), entry.seats, now, conflicts);
+    if (group === null) return null;
+    const groupIds = new Set(group.map((member) => member.userId));
+    const chosen = eligible.filter((other) => groupIds.has(other.userId));
 
     await tx.matchQueueEntry.deleteMany({
-      where: { id: { in: [entry.id, partnerEntry.id] } },
+      where: { id: { in: [entry.id, ...chosen.map((member) => member.id)] } },
     });
-    // The player who waited longest sits in seat 0; who opens is a coin flip.
-    const [first, second] =
-      partnerEntry.joinedAt.getTime() <= entry.joinedAt.getTime()
-        ? [partnerEntry, entry]
-        : [entry, partnerEntry];
+    // Whoever waited longest sits in seat 0, and so on; who opens is a coin flip.
+    const seated = [entry, ...chosen].sort((a, b) => a.joinedAt.getTime() - b.joinedAt.getTime());
     return this.matches.createMatch(
       {
         gameId: entry.gameId as GameId,
         kind: 'QUICK',
-        seats: [{ userId: first.userId }, { userId: second.userId }],
-        openingSeat: randomInt(0, 2) === 0 ? 0 : 1,
+        seats: seated.map((member) => ({ userId: member.userId })),
+        openingSeat: randomInt(0, seated.length) as 0 | 1 | 2 | 3,
       },
       tx,
     );

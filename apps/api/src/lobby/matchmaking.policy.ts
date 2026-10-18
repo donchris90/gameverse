@@ -58,3 +58,36 @@ export function pickPartner(
   }
   return best;
 }
+
+/**
+ * Picks `size - 1` partners for `seeker` to make a group of `size`. Candidates are tried closest
+ * in rating first (ties: longest wait). Each one must fit the seeker's band and every player
+ * already chosen, and must not be blocked with any of them (`conflicts`). Returns null when no
+ * such group exists yet. For size 2 this is exactly `pickPartner`.
+ */
+export function pickGroup(
+  seeker: Waiting,
+  candidates: readonly Waiting[],
+  size: number,
+  now: Date,
+  conflicts: (a: string, b: string) => boolean = () => false,
+): Waiting[] | null {
+  const ordered = [...candidates]
+    .filter((candidate) => candidate.userId !== seeker.userId)
+    .sort((a, b) => {
+      const gapA = Math.abs(a.rating - seeker.rating);
+      const gapB = Math.abs(b.rating - seeker.rating);
+      return gapA - gapB || a.joinedAt.getTime() - b.joinedAt.getTime();
+    });
+  const chosen: Waiting[] = [];
+  for (const candidate of ordered) {
+    const group = [seeker, ...chosen];
+    const fits = group.every(
+      (member) => canPair(member, candidate, now) && !conflicts(member.userId, candidate.userId),
+    );
+    if (!fits) continue;
+    chosen.push(candidate);
+    if (chosen.length === size - 1) return chosen;
+  }
+  return null;
+}

@@ -977,6 +977,10 @@ export class MatchesService implements OnModuleInit {
         where: { hostId: userId, status: 'OPEN', expiresAt: { gt: new Date() } },
       });
       if (hosting > 0) throw invalidState('Close your open room before starting a bot match');
+      const inRoom = await tx.gameRoomMember.count({
+        where: { userId, room: { status: 'OPEN', expiresAt: { gt: new Date() } } },
+      });
+      if (inRoom > 0) throw invalidState('Leave your room before starting a bot match');
       await tx.matchQueueEntry.deleteMany({ where: { userId } });
       return this.createMatch(
         {

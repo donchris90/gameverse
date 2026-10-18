@@ -24,13 +24,24 @@ export interface RoomView {
   status: RoomStatus;
   host: RoomPartyView;
   invited: RoomPartyView | null;
+  /** Players the game starts with when the room is full (2 for tic-tac-toe, 2 to 4 for Ludo). */
+  seats: number;
+  /** Guests who joined with the code, in the order they joined. The host is not listed. */
+  members: RoomPartyView[];
   expiresAt: string;
   /** Set once the match exists. */
   matchId: string | null;
   createdAt: string;
 }
 
-export const createRoomSchema = z.object({ gameId: z.enum(GAME_IDS) }).strict();
+/** Players in a Ludo match: 2 to 4. Other games are always 2. */
+export const MIN_ROOM_SEATS = 2;
+export const MAX_ROOM_SEATS = 4;
+const seatsField = z.number().int().min(MIN_ROOM_SEATS).max(MAX_ROOM_SEATS);
+
+export const createRoomSchema = z
+  .object({ gameId: z.enum(GAME_IDS), players: seatsField.optional() })
+  .strict();
 export type CreateRoomRequest = z.input<typeof createRoomSchema>;
 
 export const inviteFriendSchema = z
@@ -52,7 +63,21 @@ export type JoinRoomRequest = z.input<typeof joinRoomSchema>;
 
 export const roomIdSchema = z.uuid();
 
-export const joinQueueSchema = z.object({ gameId: z.enum(GAME_IDS) }).strict();
+/** The host starts a room that is not full yet; `bots` fills the empty seats with labelled bots. */
+export const startRoomSchema = z
+  .object({ bots: z.enum(['easy', 'medium', 'hard']).nullable().optional() })
+  .strict();
+export type StartRoomRequest = z.input<typeof startRoomSchema>;
+
+/** What joining a room with a code did: the match if the room filled up and started, else the room. */
+export interface RoomJoinResult {
+  room: RoomView;
+  match: MatchView | null;
+}
+
+export const joinQueueSchema = z
+  .object({ gameId: z.enum(GAME_IDS), players: seatsField.optional() })
+  .strict();
 export type JoinQueueRequest = z.input<typeof joinQueueSchema>;
 
 /** Seconds a quick-match search waits before the app offers to play a bot instead. */
@@ -66,6 +91,8 @@ export interface MatchmakingStatus {
   state: MatchmakingState;
   searching: {
     gameId: GameId;
+    /** How many players this search is for. */
+    players: number;
     joinedAt: string;
     waitedMs: number;
     /** Rating difference currently accepted; widens the longer the search runs. */
@@ -81,6 +108,8 @@ export interface MatchmakingStatus {
 export interface LobbyOverview {
   /** The room I am hosting (waiting for a guest, or just started), if any. */
   hosted: RoomView | null;
+  /** The room I joined with a code (waiting for the host to start, or just started), if any. */
+  joined: RoomView | null;
   /** Friend invites waiting for my answer. */
   invites: RoomView[];
 }

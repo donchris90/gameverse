@@ -7,16 +7,18 @@ import {
   type GameId,
   type LobbyOverview,
   type MatchView,
+  type RoomJoinResult,
   type RoomView,
 } from '@gameverse/shared-types';
 import { AppException } from '../common/app.exception.js';
 import type { GameRoom } from '../generated/prisma/client.js';
+import type { BotLevel } from '../generated/prisma/enums.js';
 import { OPEN_STATUSES } from '../matches/matches.constants.js';
-import { MatchesService } from '../matches/matches.service.js';
+import { BOT_TO_DB, MatchesService } from '../matches/matches.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { PushService } from '../push/push.service.js';
 import { RealtimeHub } from '../realtime/realtime.hub.js';
-import { areFriends } from '../social/relationships.js';
+import { areFriends, isBlockedEitherWay } from '../social/relationships.js';
 import { runSerializable, type Tx } from '../social/serializable.js';
 import {
   INVITE_TTL_MS,
@@ -57,15 +59,25 @@ export class RoomsService {
   // ----------------------------------------------------------------- reading
 
   private async viewsFor(rooms: readonly GameRoom[], viewerId: string, now: Date) {
+    const memberRows = await this.prisma.gameRoomMember.findMany({
+      where: { roomId: { in: rooms.map((r) => r.id) } },
+      orderBy: { joinedAt: 'asc' },
+      select: { roomId: true, userId: true },
+    });
+    const membersOf = (roomId: string) =>
+      memberRows.filter((row) => row.roomId === roomId).map((row) => row.userId);
     const ids = [
-      ...new Set(rooms.flatMap((r) => [r.hostId, ...(r.invitedUserId ? [r.invitedUserId] : [])])),
+      ...new Set([
+        ...rooms.flatMap((r) => [r.hostId, ...(r.invitedUserId ? [r.invitedUserId] : [])]),
+        ...memberRows.map((row) => row.userId),
+      ]),
     ];
     const profiles = await this.prisma.userProfile.findMany({
       where: { userId: { in: ids } },
       select: { userId: true, username: true, avatarId: true },
     });
     const lookup = new Map(profiles.map((p) => [p.userId, p]));
-    return rooms.map((room) => toRoomView(room, viewerId, lookup, now));
+    return rooms.map((room) => toRoomView(room, viewerId, lookup, now, membersOf(room.id)));
   }
 
   async overview(userId: string, now: Date = new Date()): Promise<LobbyOverview> {
@@ -84,8 +96,23 @@ export class RoomsService {
       orderBy: { createdAt: 'desc' },
       take: MAX_INVITES_SHOWN,
     });
+    const joined = await this.prisma.gameRoom.findFirst({
+      where: {
+        members: { some: { userId } },
+        OR: [
+          { status: 'OPEN', expiresAt: { gt: now } },
+          { status: 'STARTED', respondedAt: { gt: new Date(now.getTime() - STARTED_VISIBLE_MS) } },
+        ],
+      },
+      orderBy: { createdAt: 'desc' },
+    });
     const [hostedView] = hosted ? await this.viewsFor([hosted], userId, now) : [];
-    return { hosted: hostedView ?? null, invites: await this.viewsFor(invites, userId, now) };
+    const [joinedView] = joined ? await this.viewsFor([joined], userId, now) : [];
+    return {
+      hosted: hostedView ?? null,
+      joined: joinedView ?? null,
+      invites: await this.viewsFor(invites, userId, now),
+    };
   }
 
   /** Tells both parties the room changed. Best effort: REST is the truth. */
@@ -94,7 +121,16 @@ export class RoomsService {
       const room = await this.prisma.gameRoom.findUnique({ where: { id: roomId } });
       if (!room) return;
       const now = new Date();
-      for (const userId of [room.hostId, ...(room.invitedUserId ? [room.invitedUserId] : [])]) {
+      const members = await this.prisma.gameRoomMember.findMany({
+        where: { roomId: room.id },
+        select: { userId: true },
+      });
+      const audience = new Set([
+        room.hostId,
+        ...(room.invitedUserId ? [room.invitedUserId] : []),
+        ...members.map((member) => member.userId),
+      ]);
+      for (const userId of audience) {
         const [view] = await this.viewsFor([room], userId, now);
         if (view) this.hub.publishToUser(userId, { type: 'room.update', room: view });
       }
@@ -134,6 +170,21 @@ export class RoomsService {
         'Cancel your search before creating a room',
       );
     }
+    await this.assertNotInOpenRoom(tx, userId, new Date());
+  }
+
+  /** Someone who joined a room with a code cannot also host or join another until they leave it. */
+  private async assertNotInOpenRoom(tx: Tx, userId: string, now: Date): Promise<void> {
+    const joined = await tx.gameRoomMember.count({
+      where: { userId, room: { status: 'OPEN', expiresAt: { gt: now } } },
+    });
+    if (joined > 0) {
+      throw new AppException(
+        HttpStatus.CONFLICT,
+        ErrorCode.INVALID_STATE,
+        'Leave your current room first',
+      );
+    }
   }
 
   private async open(
@@ -141,11 +192,19 @@ export class RoomsService {
     gameId: GameId,
     invitedUserId: string | null,
     now: Date,
+    players = 2,
   ): Promise<GameRoom> {
     const room = await runSerializable(this.prisma, async (tx) => {
       const game = await tx.game.findUnique({ where: { id: gameId } });
       if (!game || !game.enabled) {
         throw new AppException(HttpStatus.NOT_FOUND, ErrorCode.NOT_FOUND, 'Game not found');
+      }
+      if (players < game.minPlayers || players > game.maxPlayers) {
+        throw new AppException(
+          HttpStatus.BAD_REQUEST,
+          ErrorCode.VALIDATION_FAILED,
+          `This game is for ${game.minPlayers === game.maxPlayers ? game.minPlayers : `${game.minPlayers} to ${game.maxPlayers}`} players`,
+        );
       }
       await this.assertCanHost(tx, hostId);
       if (invitedUserId !== null) {
@@ -177,6 +236,7 @@ export class RoomsService {
           gameId,
           hostId,
           invitedUserId,
+          seats: players,
           expiresAt: new Date(now.getTime() + (invitedUserId ? INVITE_TTL_MS : ROOM_TTL_MS)),
           createdAt: now,
         },
@@ -186,8 +246,13 @@ export class RoomsService {
     return room;
   }
 
-  async create(hostId: string, gameId: GameId, now: Date = new Date()): Promise<RoomView> {
-    const room = await this.open(hostId, gameId, null, now);
+  async create(
+    hostId: string,
+    gameId: GameId,
+    players = 2,
+    now: Date = new Date(),
+  ): Promise<RoomView> {
+    const room = await this.open(hostId, gameId, null, now, players);
     const [view] = await this.viewsFor([room], hostId, now);
     return view as RoomView;
   }
@@ -212,7 +277,7 @@ export class RoomsService {
     });
     this.push.notify(friendUserId, {
       title: 'GameVerse',
-      body: `${host?.username ?? 'A friend'} invited you to play Tic-Tac-Toe`,
+      body: `${host?.username ?? 'A friend'} invited you to play ${gameId === 'ludo' ? 'Ludo' : 'Tic-Tac-Toe'}`,
       data: { type: 'GAME_INVITE', roomId: room.id },
     });
     const [view] = await this.viewsFor([room], hostId, now);
@@ -241,24 +306,36 @@ export class RoomsService {
     }
   }
 
-  /** Starts the match for an OPEN room. Runs inside the caller's SERIALIZABLE transaction. */
-  private async start(tx: Tx, room: GameRoom, guestId: string, now: Date): Promise<string> {
-    if (room.hostId === guestId) {
-      throw new AppException(
-        HttpStatus.CONFLICT,
-        ErrorCode.INVALID_STATE,
-        'You cannot join your own room',
-      );
-    }
-    // The guest chose this game: any search they had running is over.
-    await tx.matchQueueEntry.deleteMany({ where: { userId: guestId } });
+  /**
+   * Starts the match for an OPEN room with the host in seat 0 and the guests behind them in the
+   * order they joined. `bots` fills the seats nobody took with labelled bots (and makes the match
+   * a bot match: practice XP, no rating). Runs inside the caller's SERIALIZABLE transaction.
+   */
+  private async startRoom(
+    tx: Tx,
+    room: GameRoom,
+    guestIds: readonly string[],
+    now: Date,
+    bots: BotLevel | null = null,
+  ): Promise<string> {
+    // The guests chose this game: any search or other room they had is over.
+    await tx.matchQueueEntry.deleteMany({ where: { userId: { in: [...guestIds] } } });
+    await tx.gameRoomMember.deleteMany({
+      where: { userId: { in: [...guestIds] }, roomId: { not: room.id } },
+    });
+    const humans = 1 + guestIds.length;
+    const botSeats = bots === null ? 0 : Math.max(0, room.seats - humans);
+    const seats = [
+      { userId: room.hostId },
+      ...guestIds.map((userId) => ({ userId })),
+      ...Array.from({ length: botSeats }, () => ({ bot: bots as BotLevel })),
+    ];
     const matchId = await this.matches.createMatch(
       {
         gameId: room.gameId as GameId,
-        kind: room.invitedUserId === null ? 'PRIVATE' : 'FRIEND',
-        // The host sits in seat 0; who opens is a coin flip.
-        seats: [{ userId: room.hostId }, { userId: guestId }],
-        openingSeat: randomInt(0, 2) === 0 ? 0 : 1,
+        kind: botSeats > 0 ? 'BOT' : room.invitedUserId === null ? 'PRIVATE' : 'FRIEND',
+        seats,
+        openingSeat: randomInt(0, seats.length) as 0 | 1 | 2 | 3,
       },
       tx,
     );
@@ -269,12 +346,16 @@ export class RoomsService {
     return matchId;
   }
 
-  private async startAndShow(
+  /**
+   * Adds the player to an open room, and starts the match when that fills the last seat.
+   * Joining twice is harmless. Every "no" is the same room-not-found answer.
+   */
+  private async enter(
     userId: string,
     find: (tx: Tx) => Promise<GameRoom | null>,
     now: Date,
-  ): Promise<MatchView> {
-    const { matchId, roomId } = await runSerializable(this.prisma, async (tx) => {
+  ): Promise<{ matchId: string | null; roomId: string }> {
+    return runSerializable(this.prisma, async (tx) => {
       const room = await find(tx);
       if (
         !room ||
@@ -284,14 +365,49 @@ export class RoomsService {
       ) {
         throw roomNotFound();
       }
-      return { matchId: await this.start(tx, room, userId, now), roomId: room.id };
+      if (room.hostId === userId) {
+        throw new AppException(
+          HttpStatus.CONFLICT,
+          ErrorCode.INVALID_STATE,
+          'You cannot join your own room',
+        );
+      }
+      const members = await tx.gameRoomMember.findMany({
+        where: { roomId: room.id },
+        orderBy: { joinedAt: 'asc' },
+        select: { userId: true },
+      });
+      if (members.some((member) => member.userId === userId)) {
+        return { matchId: null, roomId: room.id };
+      }
+      await this.assertNotInOpenRoom(tx, userId, now);
+      for (const other of [room.hostId, ...members.map((member) => member.userId)]) {
+        if (await isBlockedEitherWay(tx, userId, other)) throw roomNotFound();
+      }
+      await tx.gameRoomMember.create({ data: { roomId: room.id, userId, joinedAt: now } });
+      const guestIds = [...members.map((member) => member.userId), userId];
+      if (1 + guestIds.length < room.seats) return { matchId: null, roomId: room.id };
+      return { matchId: await this.startRoom(tx, room, guestIds, now), roomId: room.id };
     });
-    await this.matches.publish(matchId);
-    await this.announce(roomId);
-    return this.matches.get(userId, matchId);
   }
 
-  async joinByCode(userId: string, code: string, now: Date = new Date()): Promise<MatchView> {
+  private async startAndShow(
+    userId: string,
+    find: (tx: Tx) => Promise<GameRoom | null>,
+    now: Date,
+  ): Promise<RoomJoinResult> {
+    const { matchId, roomId } = await this.enter(userId, find, now);
+    if (matchId !== null) await this.matches.publish(matchId);
+    await this.announce(roomId);
+    const room = await this.prisma.gameRoom.findUniqueOrThrow({ where: { id: roomId } });
+    const [view] = await this.viewsFor([room], userId, now);
+    return {
+      room: view as RoomView,
+      match: matchId === null ? null : await this.matches.get(userId, matchId),
+    };
+  }
+
+  async joinByCode(userId: string, code: string, now: Date = new Date()): Promise<RoomJoinResult> {
     this.checkNotGuessing(userId, now);
     try {
       return await this.startAndShow(
@@ -308,7 +424,7 @@ export class RoomsService {
   }
 
   async accept(userId: string, roomId: string, now: Date = new Date()): Promise<MatchView> {
-    return this.startAndShow(
+    const result = await this.startAndShow(
       userId,
       async (tx) => {
         const room = await tx.gameRoom.findUnique({ where: { id: roomId } });
@@ -316,6 +432,72 @@ export class RoomsService {
       },
       now,
     );
+    if (result.match === null) throw roomNotFound();
+    return result.match;
+  }
+
+  /**
+   * The host starts the room now: with the guests who are here, or with labelled bots in the empty
+   * seats. Starting twice returns the same match.
+   */
+  async hostStart(
+    userId: string,
+    roomId: string,
+    bots: 'easy' | 'medium' | 'hard' | null,
+    now: Date = new Date(),
+  ): Promise<MatchView> {
+    const level: BotLevel | null = bots === null ? null : (BOT_TO_DB[bots] as BotLevel);
+    const started = await runSerializable(this.prisma, async (tx) => {
+      const room = await tx.gameRoom.findUnique({ where: { id: roomId } });
+      if (!room || room.hostId !== userId) throw roomNotFound();
+      if (room.status === 'STARTED' && room.matchId !== null) {
+        return { matchId: room.matchId, fresh: false };
+      }
+      if (room.status !== 'OPEN' || room.expiresAt.getTime() <= now.getTime()) throw roomNotFound();
+      const members = await tx.gameRoomMember.findMany({
+        where: { roomId: room.id },
+        orderBy: { joinedAt: 'asc' },
+        select: { userId: true },
+      });
+      if (members.length === 0) {
+        throw new AppException(
+          HttpStatus.CONFLICT,
+          ErrorCode.INVALID_STATE,
+          'Wait for another player to join, or start a game against bots from the Play tab',
+        );
+      }
+      const matchId = await this.startRoom(
+        tx,
+        room,
+        members.map((member) => member.userId),
+        now,
+        level,
+      );
+      return { matchId, fresh: true };
+    });
+    if (started.fresh) {
+      await this.matches.publish(started.matchId);
+      await this.announce(roomId);
+    }
+    return this.matches.get(userId, started.matchId);
+  }
+
+  /** A guest leaves a room they joined, before it starts. */
+  async leave(userId: string, roomId: string, now: Date = new Date()): Promise<RoomView> {
+    await runSerializable(this.prisma, async (tx) => {
+      const room = await tx.gameRoom.findUnique({ where: { id: roomId } });
+      const member = room
+        ? await tx.gameRoomMember.findUnique({
+            where: { roomId_userId: { roomId, userId } },
+          })
+        : null;
+      if (!room || !member || room.status !== 'OPEN') throw roomNotFound();
+      await tx.gameRoomMember.delete({ where: { id: member.id } });
+    });
+    await this.announce(roomId);
+    const room = await this.prisma.gameRoom.findUniqueOrThrow({ where: { id: roomId } });
+    const [view] = await this.viewsFor([room], userId, now);
+    return view as RoomView;
   }
 
   // ------------------------------------------------------------------ closing

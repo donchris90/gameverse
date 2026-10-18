@@ -11,6 +11,7 @@ import type {
   MatchView,
   MatchmakingStatus,
   MyProgress,
+  RoomJoinResult,
   RoomView,
   VoiceSessionView,
   VoiceTokenView,
@@ -118,17 +119,30 @@ export const games = {
     }),
   leave: (id: string) => request<MatchView>('POST', matchPath(id, 'leave'), { body: {} }),
   rematch: (id: string) => request<MatchView>('POST', matchPath(id, 'rematch'), { body: {} }),
-  startBot: (gameId: GameId, level: BotLevelName) =>
-    request<MatchView>('POST', '/v1/matches/bot', { body: { gameId, level } }),
+  startBot: (gameId: GameId, level: BotLevelName, players?: number) =>
+    request<MatchView>('POST', '/v1/matches/bot', { body: { gameId, level, players } }),
 
   queue: () => request<MatchmakingStatus>('GET', '/v1/matchmaking'),
-  joinQueue: (gameId: GameId) =>
-    request<MatchmakingStatus>('POST', '/v1/matchmaking/join', { body: { gameId } }),
+  joinQueue: (gameId: GameId, players?: number) =>
+    request<MatchmakingStatus>('POST', '/v1/matchmaking/join', { body: { gameId, players } }),
   cancelQueue: () => request<MatchmakingStatus>('POST', '/v1/matchmaking/cancel', { body: {} }),
 
   lobby: () => request<LobbyOverview>('GET', '/v1/rooms'),
-  createRoom: (gameId: GameId) => request<RoomView>('POST', '/v1/rooms', { body: { gameId } }),
-  joinRoom: (code: string) => request<MatchView>('POST', '/v1/rooms/join', { body: { code } }),
+  createRoom: (gameId: GameId, players?: number) =>
+    request<RoomView>('POST', '/v1/rooms', { body: { gameId, players } }),
+  /** Joins with a code. `match` is null while the room is still waiting for more players. */
+  joinRoomResult: (code: string) =>
+    request<RoomJoinResult>('POST', '/v1/rooms/join', { body: { code } }),
+  /** Two-player games always start on join; used by the tic-tac-toe screens. */
+  joinRoom: async (code: string): Promise<MatchView> => {
+    const result = await request<RoomJoinResult>('POST', '/v1/rooms/join', { body: { code } });
+    if (result.match === null) throw new Error('The room is waiting for more players');
+    return result.match;
+  },
+  startRoom: (roomId: string, bots: BotLevelName | null = null) =>
+    request<MatchView>('POST', `/v1/rooms/${roomId}/start`, { body: { bots } }),
+  leaveRoom: (roomId: string) =>
+    request<RoomView>('POST', `/v1/rooms/${roomId}/leave`, { body: {} }),
   invite: (friendUserId: string, gameId: GameId) =>
     request<RoomView>('POST', '/v1/rooms/invite', { body: { gameId, friendUserId } }),
   acceptInvite: (roomId: string) =>

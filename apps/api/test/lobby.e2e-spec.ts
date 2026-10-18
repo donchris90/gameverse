@@ -9,6 +9,7 @@ import {
   ROOM_CODE_PATTERN,
   type MatchView,
   type MatchmakingStatus,
+  type RoomJoinResult,
   type RoomView,
 } from '@gameverse/shared-types';
 import { MatchmakingService } from '../src/lobby/matchmaking.service.js';
@@ -223,7 +224,7 @@ describe('lobby (matchmaking, private rooms, friend invites)', () => {
       await join(a);
       const entry = await t.prisma.matchQueueEntry.findUniqueOrThrow({ where: { userId: a.id } });
       const later = new Date(entry.joinedAt.getTime() + QUEUE_TTL_MS + 1);
-      const fresh = await matchmaking().join(a.id, 'tictactoe', later);
+      const fresh = await matchmaking().join(a.id, 'tictactoe', 2, later);
       expect(fresh.state).toBe('searching');
       expect(fresh.searching?.waitedMs).toBe(0);
     });
@@ -407,7 +408,9 @@ describe('lobby (matchmaking, private rooms, friend invites)', () => {
       const [host, guest] = (await players(2)) as [SocialUser, SocialUser];
       const room = (await createRoom(host).expect(201)).body as RoomView;
       const response = await joinCode(guest, `  ${(room.code ?? '').toLowerCase()} `).expect(200);
-      const match = response.body as MatchView;
+      const { match, room: joinedRoom } = response.body as RoomJoinResult;
+      expect(joinedRoom).toMatchObject({ status: 'STARTED', seats: 2, matchId: match?.id });
+      if (match === null) throw new Error('the room filled up, so the match should exist');
       expect(match).toMatchObject({ kind: 'PRIVATE', status: 'READY', mySeat: 1 });
       expect(match.players.map((p) => p.userId)).toEqual([host.id, guest.id]);
 

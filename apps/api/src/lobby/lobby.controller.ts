@@ -17,6 +17,8 @@ import {
   inviteFriendSchema,
   joinQueueSchema,
   joinRoomSchema,
+  startRoomSchema,
+  type RoomJoinResult,
   roomIdSchema,
   emptyActionSchema,
 } from '@gameverse/shared-types';
@@ -51,7 +53,7 @@ export class LobbyController {
     @CurrentUser() user: AuthUser,
     @Body(new ZodValidationPipe(joinQueueSchema)) body: z.output<typeof joinQueueSchema>,
   ): Promise<MatchmakingStatus> {
-    return this.matchmaking.join(user.id, body.gameId);
+    return this.matchmaking.join(user.id, body.gameId, body.players);
   }
 
   @Post('matchmaking/cancel')
@@ -75,7 +77,7 @@ export class LobbyController {
     @CurrentUser() user: AuthUser,
     @Body(new ZodValidationPipe(createRoomSchema)) body: z.output<typeof createRoomSchema>,
   ): Promise<RoomView> {
-    return this.rooms.create(user.id, body.gameId);
+    return this.rooms.create(user.id, body.gameId, body.players);
   }
 
   @Post('rooms/join')
@@ -83,7 +85,7 @@ export class LobbyController {
   joinByCode(
     @CurrentUser() user: AuthUser,
     @Body(new ZodValidationPipe(joinRoomSchema)) body: z.output<typeof joinRoomSchema>,
-  ): Promise<MatchView> {
+  ): Promise<RoomJoinResult> {
     return this.rooms.joinByCode(user.id, body.code);
   }
 
@@ -99,6 +101,26 @@ export class LobbyController {
   @HttpCode(HttpStatus.OK)
   accept(@CurrentUser() user: AuthUser, @roomId() id: string): Promise<MatchView> {
     return this.rooms.accept(user.id, id);
+  }
+
+  @Post('rooms/:id/start')
+  @HttpCode(HttpStatus.OK)
+  start(
+    @CurrentUser() user: AuthUser,
+    @roomId() id: string,
+    @Body(new ZodValidationPipe(startRoomSchema)) body: z.output<typeof startRoomSchema>,
+  ): Promise<MatchView> {
+    return this.rooms.hostStart(user.id, id, body.bots ?? null);
+  }
+
+  @Post('rooms/:id/leave')
+  @HttpCode(HttpStatus.OK)
+  leave(
+    @CurrentUser() user: AuthUser,
+    @roomId() id: string,
+    @Body(new ZodValidationPipe(emptyActionSchema)) _body: unknown,
+  ): Promise<RoomView> {
+    return this.rooms.leave(user.id, id);
   }
 
   @Post('rooms/:id/decline')

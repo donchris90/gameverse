@@ -1,6 +1,8 @@
 import type { RoomView } from '@gameverse/shared-types';
 import type { GameRoom } from '../generated/prisma/client.js';
 
+export type RoomMembers = ReadonlyMap<string, readonly string[]>;
+
 export type PartyLookup = ReadonlyMap<string, { username: string; avatarId: string }>;
 
 function party(lookup: PartyLookup, userId: string) {
@@ -17,6 +19,7 @@ export function toRoomView(
   viewerId: string,
   lookup: PartyLookup,
   now: Date,
+  members: readonly string[] = [],
 ): RoomView {
   const expired = room.status === 'OPEN' && room.expiresAt.getTime() <= now.getTime();
   return {
@@ -26,6 +29,8 @@ export function toRoomView(
     status: expired ? 'EXPIRED' : room.status,
     host: party(lookup, room.hostId),
     invited: room.invitedUserId === null ? null : party(lookup, room.invitedUserId),
+    seats: room.seats,
+    members: members.map((userId) => party(lookup, userId)),
     expiresAt: room.expiresAt.toISOString(),
     matchId: room.matchId,
     createdAt: room.createdAt.toISOString(),
