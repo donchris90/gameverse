@@ -87,6 +87,8 @@ export function secondsLeft(atIso: string, offsetMs: number, nowMs: number): num
 export function scoreLine(view: MatchView): string {
   const series = view.series;
   if (series === null) return '';
+  // One game decides a single-game match: a running score would only be noise.
+  if (series.bestOf === 1) return '';
   const mySide = view.mySeat === 1 ? 1 : 0;
   const mine = series.wins[mySide];
   const theirs = series.wins[mySide === 0 ? 1 : 0];

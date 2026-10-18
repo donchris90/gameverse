@@ -44,7 +44,14 @@ export interface MatchPlayerView {
   out: boolean;
 }
 
+/** Tic-tac-toe match length: one game decides, or first to win two of three. */
+export const BEST_OF_CHOICES = [1, 3] as const;
+export type BestOfChoice = (typeof BEST_OF_CHOICES)[number];
+export const bestOfSchema = z.union([z.literal(1), z.literal(3)]);
+
 export interface MatchSeriesView {
+  /** 1 = a single game, 3 = best of three (first to two wins). */
+  bestOf: BestOfChoice;
   phase: 'playing' | 'between_games' | 'completed';
   gameNumber: number;
   /** The seat that opens (plays X) in the current or just-finished game. */
@@ -241,6 +248,8 @@ export const botMatchSchema = z
     level: z.enum(BOT_LEVELS),
     /** Ludo only: total seats including the human (the rest are bots). Default 2. */
     players: z.number().int().min(2).max(4).optional(),
+    /** Tic-tac-toe only: 1 for a single game, 3 for best of three (the default). */
+    bestOf: bestOfSchema.optional(),
   })
   .strict();
 export type BotMatchRequest = z.input<typeof botMatchSchema>;

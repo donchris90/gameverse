@@ -59,6 +59,7 @@ export class LobbyController {
       body.players,
       new Date(),
       body.entryFee ?? 0,
+      body.bestOf ?? 3,
     );
   }
 
@@ -83,7 +84,14 @@ export class LobbyController {
     @CurrentUser() user: AuthUser,
     @Body(new ZodValidationPipe(createRoomSchema)) body: z.output<typeof createRoomSchema>,
   ): Promise<RoomView> {
-    return this.rooms.create(user.id, body.gameId, body.players, new Date(), body.entryFee ?? 0);
+    return this.rooms.create(
+      user.id,
+      body.gameId,
+      body.players,
+      new Date(),
+      body.entryFee ?? 0,
+      body.bestOf ?? 3,
+    );
   }
 
   @Post('rooms/join')
@@ -106,6 +114,7 @@ export class LobbyController {
       body.gameId,
       new Date(),
       body.entryFee ?? 0,
+      body.bestOf ?? 3,
     );
   }
 

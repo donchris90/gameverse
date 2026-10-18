@@ -31,6 +31,7 @@ export function toRoomView(
     invited: room.invitedUserId === null ? null : party(lookup, room.invitedUserId),
     seats: room.seats,
     entryFee: room.entryFee,
+    bestOf: room.bestOf === 1 ? 1 : 3,
     members: members.map((userId) => party(lookup, userId)),
     expiresAt: room.expiresAt.toISOString(),
     matchId: room.matchId,

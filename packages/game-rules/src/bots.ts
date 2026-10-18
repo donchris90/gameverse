@@ -31,21 +31,29 @@ function completingCell(state: TicTacToeState, mark: Mark): number | null {
   return null;
 }
 
+/** Chance that EASY notices a win or a threat to block (ported from the RRYDA Ox bot). */
+export const EASY_NOTICE_CHANCE = 0.4;
+/** Chance that MEDIUM plays the perfect move instead of a random one when nothing is forced. */
+export const MEDIUM_PERFECT_CHANCE = 0.5;
+
+/** Mostly random. Only sometimes takes a win or blocks a threat. Easy to beat, never silly-illegal. */
 function easyMove(state: TicTacToeState, rng: Rng): number {
+  const mark = state.next;
+  const win = completingCell(state, mark);
+  if (win !== null && rng() < EASY_NOTICE_CHANCE) return win;
+  const block = completingCell(state, otherMark(mark));
+  if (block !== null && rng() < EASY_NOTICE_CHANCE) return block;
   return pick(legalMoves(state), rng);
 }
 
-/** Wins if it can, blocks if it must, then prefers centre, corners, edges. Beatable by a fork. */
+/** Always wins or blocks when it can; otherwise half perfect moves, half random. Can be out-thought. */
 function mediumMove(state: TicTacToeState, rng: Rng): number {
   const mark = state.next;
   const win = completingCell(state, mark);
   if (win !== null) return win;
   const block = completingCell(state, otherMark(mark));
   if (block !== null) return block;
-  if (state.board[4] === null) return 4;
-  const corners = [0, 2, 6, 8].filter((cell) => state.board[cell] === null);
-  if (corners.length > 0) return pick(corners, rng);
-  return pick(legalMoves(state), rng);
+  return rng() < MEDIUM_PERFECT_CHANCE ? hardMove(state, rng) : pick(legalMoves(state), rng);
 }
 
 /** Score from `mark`'s point of view with best play from both sides; sooner wins score higher. */

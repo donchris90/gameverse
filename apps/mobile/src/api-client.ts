@@ -14,6 +14,7 @@ import type {
   RoomJoinResult,
   RoomView,
   VoiceSessionView,
+  BestOfChoice,
   EntryFee,
   WalletView,
   VoiceTokenView,
@@ -158,20 +159,32 @@ export const games = {
     }),
   leave: (id: string) => request<MatchView>('POST', matchPath(id, 'leave'), { body: {} }),
   rematch: (id: string) => request<MatchView>('POST', matchPath(id, 'rematch'), { body: {} }),
-  startBot: (gameId: GameId, level: BotLevelName, players?: number) =>
-    request<MatchView>('POST', '/v1/matches/bot', { body: { gameId, level, players } }),
+  startBot: (gameId: GameId, level: BotLevelName, players?: number, bestOf?: BestOfChoice) =>
+    request<MatchView>('POST', '/v1/matches/bot', {
+      body: { gameId, level, players, ...(bestOf === 1 ? { bestOf } : {}) },
+    }),
 
   queue: () => request<MatchmakingStatus>('GET', '/v1/matchmaking'),
-  joinQueue: (gameId: GameId, players?: number, entryFee?: EntryFee) =>
+  joinQueue: (gameId: GameId, players?: number, entryFee?: EntryFee, bestOf?: BestOfChoice) =>
     request<MatchmakingStatus>('POST', '/v1/matchmaking/join', {
-      body: { gameId, players, ...(entryFee ? { entryFee } : {}) },
+      body: {
+        gameId,
+        players,
+        ...(entryFee ? { entryFee } : {}),
+        ...(bestOf === 1 ? { bestOf } : {}),
+      },
     }),
   cancelQueue: () => request<MatchmakingStatus>('POST', '/v1/matchmaking/cancel', { body: {} }),
 
   lobby: () => request<LobbyOverview>('GET', '/v1/rooms'),
-  createRoom: (gameId: GameId, players?: number, entryFee?: EntryFee) =>
+  createRoom: (gameId: GameId, players?: number, entryFee?: EntryFee, bestOf?: BestOfChoice) =>
     request<RoomView>('POST', '/v1/rooms', {
-      body: { gameId, players, ...(entryFee ? { entryFee } : {}) },
+      body: {
+        gameId,
+        players,
+        ...(entryFee ? { entryFee } : {}),
+        ...(bestOf === 1 ? { bestOf } : {}),
+      },
     }),
   /** Joins with a code. `match` is null while the room is still waiting for more players. */
   joinRoomResult: (code: string, entryFee?: number) =>

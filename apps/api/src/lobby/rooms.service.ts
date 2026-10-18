@@ -17,6 +17,7 @@ import { OPEN_STATUSES } from '../matches/matches.constants.js';
 import { BOT_TO_DB, MatchesService } from '../matches/matches.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { PushService } from '../push/push.service.js';
+import { assertBestOf } from '../matches/best-of.js';
 import { EntryService } from '../matches/entry.service.js';
 import { WalletService } from '../wallet/wallet.service.js';
 import { RealtimeHub } from '../realtime/realtime.hub.js';
@@ -205,7 +206,9 @@ export class RoomsService {
     now: Date,
     players = 2,
     entryFee = 0,
+    bestOf: 1 | 3 = 3,
   ): Promise<GameRoom> {
+    assertBestOf(gameId, bestOf);
     const room = await runSerializable(this.prisma, async (tx) => {
       const game = await tx.game.findUnique({ where: { id: gameId } });
       if (!game || !game.enabled) {
@@ -254,6 +257,7 @@ export class RoomsService {
           invitedUserId,
           seats: players,
           entryFee,
+          bestOf,
           expiresAt: new Date(now.getTime() + (invitedUserId ? INVITE_TTL_MS : ROOM_TTL_MS)),
           createdAt: now,
         },
@@ -269,8 +273,9 @@ export class RoomsService {
     players = 2,
     now: Date = new Date(),
     entryFee = 0,
+    bestOf: 1 | 3 = 3,
   ): Promise<RoomView> {
-    const room = await this.open(hostId, gameId, null, now, players, entryFee);
+    const room = await this.open(hostId, gameId, null, now, players, entryFee, bestOf);
     const [view] = await this.viewsFor([room], hostId, now);
     return view as RoomView;
   }
@@ -281,6 +286,7 @@ export class RoomsService {
     gameId: GameId,
     now: Date = new Date(),
     entryFee = 0,
+    bestOf: 1 | 3 = 3,
   ): Promise<RoomView> {
     if (friendUserId === hostId) {
       throw new AppException(
@@ -289,7 +295,7 @@ export class RoomsService {
         'You cannot invite yourself',
       );
     }
-    const room = await this.open(hostId, gameId, friendUserId, now, 2, entryFee);
+    const room = await this.open(hostId, gameId, friendUserId, now, 2, entryFee, bestOf);
     const host = await this.prisma.userProfile.findUnique({
       where: { userId: hostId },
       select: { username: true },
@@ -356,6 +362,7 @@ export class RoomsService {
         seats,
         openingSeat: randomInt(0, seats.length) as 0 | 1 | 2 | 3,
         entryFee: room.entryFee,
+        bestOf: room.bestOf === 1 ? 1 : 3,
       },
       tx,
     );

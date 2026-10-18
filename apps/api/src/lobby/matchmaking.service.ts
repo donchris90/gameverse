@@ -4,6 +4,7 @@ import { ErrorCode, type GameId, type MatchmakingStatus } from '@gameverse/share
 import { AppException } from '../common/app.exception.js';
 import type { MatchQueueEntry } from '../generated/prisma/client.js';
 import { OPEN_STATUSES } from '../matches/matches.constants.js';
+import { assertBestOf } from '../matches/best-of.js';
 import { EntryService } from '../matches/entry.service.js';
 import { MatchesService } from '../matches/matches.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
@@ -49,6 +50,7 @@ export class MatchmakingService {
           gameId: entry.gameId as GameId,
           players: entry.seats,
           entryFee: entry.entryFee,
+          bestOf: entry.bestOf === 1 ? 1 : 3,
           joinedAt: entry.joinedAt.toISOString(),
           waitedMs,
           ratingBand: ratingBand(waitedMs),
@@ -74,7 +76,9 @@ export class MatchmakingService {
     players = 2,
     now: Date = new Date(),
     entryFee = 0,
+    bestOf: 1 | 3 = 3,
   ): Promise<MatchmakingStatus> {
+    assertBestOf(gameId, bestOf);
     const matchId = await runSerializable(this.prisma, async (tx) => {
       const game = await tx.game.findUnique({ where: { id: gameId } });
       if (!game || !game.enabled) {
@@ -103,7 +107,8 @@ export class MatchmakingService {
         if (
           existing.gameId !== gameId ||
           existing.seats !== players ||
-          existing.entryFee !== entryFee
+          existing.entryFee !== entryFee ||
+          existing.bestOf !== bestOf
         ) {
           throw new AppException(
             HttpStatus.CONFLICT,
@@ -157,6 +162,7 @@ export class MatchmakingService {
           gameId,
           seats: players,
           entryFee,
+          bestOf,
           rating: await this.ratingOf(tx, userId, gameId),
           joinedAt: now,
         },
@@ -185,6 +191,7 @@ export class MatchmakingService {
         gameId: entry.gameId,
         seats: entry.seats,
         entryFee: entry.entryFee,
+        bestOf: entry.bestOf,
         userId: { not: entry.userId },
         joinedAt: { gt: new Date(now.getTime() - QUEUE_TTL_MS) },
       },
@@ -248,6 +255,7 @@ export class MatchmakingService {
         seats: seated.map((member) => ({ userId: member.userId })),
         openingSeat: randomInt(0, seated.length) as 0 | 1 | 2 | 3,
         entryFee: entry.entryFee,
+        bestOf: entry.bestOf === 1 ? 1 : 3,
       },
       tx,
     );

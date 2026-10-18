@@ -382,6 +382,7 @@ describe('roomSummary', () => {
     invited: null,
     seats: 4,
     entryFee: 0,
+    bestOf: 3,
     members: [],
     expiresAt: '2026-10-18T12:10:00.000Z',
     matchId: null,

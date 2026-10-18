@@ -3,6 +3,7 @@ import {
   BOT_LEVELS,
   QUEUE_BOT_OFFER_AFTER_MS,
   formatCoins,
+  type BestOfChoice,
   type EntryFee,
   type GameId,
 } from '@gameverse/shared-types';
@@ -35,6 +36,7 @@ export default function GameScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const play = usePlay();
   const [entryFee, setEntryFee] = useState<EntryFee>(0);
+  const [bestOf, setBestOf] = useState<BestOfChoice>(3);
   const info = id && id in GAME_INFO ? GAME_INFO[id as GameId] : null;
 
   if (!info) return <Empty text="That game does not exist." />;
@@ -89,6 +91,32 @@ export default function GameScreen() {
               balance={play.coins.data?.balance ?? null}
               disabled={act.busy}
             />
+          </Section>
+        ) : null}
+
+        {info.id === 'tictactoe' && !resume && !searchingHere && !room && !joined ? (
+          <Section title="Match length">
+            <View style={styles.row}>
+              {(
+                [
+                  { value: 1, label: 'Single game' },
+                  { value: 3, label: 'Best of 3' },
+                ] as const
+              ).map((choice) => (
+                <View key={choice.value} style={styles.flex}>
+                  <Button
+                    label={choice.label}
+                    tone={bestOf === choice.value ? 'primary' : 'secondary'}
+                    onPress={() => setBestOf(choice.value)}
+                  />
+                </View>
+              ))}
+            </View>
+            <Body muted>
+              {bestOf === 1
+                ? 'One game decides it. A draw is a draw.'
+                : 'First to win 2 games takes the match. X and O swap every game.'}
+            </Body>
           </Section>
         ) : null}
 
@@ -147,7 +175,7 @@ export default function GameScreen() {
                     busy={act.busy}
                     disabled={play.occupied}
                     onPress={() =>
-                      void play.run(() => games.joinQueue(info.id, undefined, entryFee))
+                      void play.run(() => games.joinQueue(info.id, undefined, entryFee, bestOf))
                     }
                   />
                 </>
@@ -172,7 +200,9 @@ export default function GameScreen() {
                 tone="secondary"
                 busy={act.busy}
                 disabled={play.occupied}
-                onPress={() => void play.start(() => games.startBot(info.id, play.level))}
+                onPress={() =>
+                  void play.start(() => games.startBot(info.id, play.level, undefined, bestOf))
+                }
               />
             </Section>
 
@@ -214,7 +244,7 @@ export default function GameScreen() {
                     busy={act.busy}
                     disabled={play.occupied}
                     onPress={() =>
-                      void play.run(() => games.createRoom(info.id, undefined, entryFee))
+                      void play.run(() => games.createRoom(info.id, undefined, entryFee, bestOf))
                     }
                   />
                 </>

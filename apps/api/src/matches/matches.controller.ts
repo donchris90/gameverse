@@ -45,7 +45,13 @@ export class MatchesController {
     @CurrentUser() user: AuthUser,
     @Body(new ZodValidationPipe(botMatchSchema)) body: z.output<typeof botMatchSchema>,
   ): Promise<MatchView> {
-    return this.matches.startBotMatch(user.id, body.gameId, body.level, body.players);
+    return this.matches.startBotMatch(
+      user.id,
+      body.gameId,
+      body.level,
+      body.players,
+      body.bestOf ?? 3,
+    );
   }
 
   @Get(':id')

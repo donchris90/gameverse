@@ -11,13 +11,13 @@ import {
   resultLines,
   statusLine,
   tappableCells,
-  type MatchView,
 } from '@gameverse/shared-types';
 import * as Crypto from 'expo-crypto';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { chat, games } from '../../src/api-client';
+import { PlayerStrip, TttBoard } from '../../src/tictactoe/TttBoard';
 import { ApiError } from '../../src/http';
 import { AyoMatch } from '../../src/ayo/AyoMatch';
 import { DraughtsMatch } from '../../src/draughts/DraughtsMatch';
@@ -36,43 +36,12 @@ const TONE_COLOR = {
   warn: c.warning,
 } as const;
 
-function Board({ match, onTap }: { match: MatchView; onTap: (cell: number) => void }) {
-  const cells = match.series?.board ?? Array<null>(9).fill(null);
-  const open = new Set(tappableCells(match));
-  const winLine = new Set(match.series?.winLine ?? []);
-  return (
-    <View style={styles.board} accessibilityLabel="Game board">
-      {cells.map((value, index) => {
-        const tappable = open.has(index);
-        return (
-          <Pressable
-            key={index}
-            disabled={!tappable}
-            onPress={() => onTap(index)}
-            accessibilityRole="button"
-            accessibilityLabel={`Cell ${String(index + 1)}, ${value ?? 'empty'}`}
-            accessibilityState={{ disabled: !tappable }}
-            style={[
-              styles.cell,
-              winLine.has(index) && { borderColor: c.success },
-              tappable && { backgroundColor: c.surfaceRaised },
-            ]}
-          >
-            <Text style={[styles.mark, value === 'O' && { color: c.accentBlue }]}>
-              {value ?? ''}
-            </Text>
-          </Pressable>
-        );
-      })}
-    </View>
-  );
-}
-
 export default function MatchScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { match, error, apply, refresh, deadlineSeconds } = useMatch(id);
   const act = useAction();
+  const { width } = useWindowDimensions();
   const pendingMove = useRef<{ cell: number; version: number; clientActionId: string } | null>(
     null,
   );
@@ -151,6 +120,7 @@ export default function MatchScreen() {
       <Text style={styles.versus}>
         You{mark ? ` (${mark})` : ''} vs {displayName(opponent)}
         {opponent.bot !== null ? ' · computer player' : ''}
+        {match.series?.bestOf === 1 ? ' · single game' : ''}
       </Text>
 
       <View accessibilityLiveRegion="polite">
@@ -159,7 +129,13 @@ export default function MatchScreen() {
         {coinLine ? <Body>{coinLine}</Body> : null}
       </View>
 
-      <Board match={match} onTap={onTap} />
+      <PlayerStrip match={match} />
+      <TttBoard
+        match={match}
+        open={new Set(tappableCells(match))}
+        width={Math.min(width - s.lg * 2, 360)}
+        onTap={onTap}
+      />
       <ErrorText error={act.error} />
 
       {canPressReady(match) ? (
@@ -225,22 +201,5 @@ const styles = StyleSheet.create({
   content: { padding: s.lg },
   versus: { color: c.textSecondary, fontSize: 15, marginBottom: s.md },
   headline: { fontSize: 22, fontWeight: '700', marginBottom: s.xs },
-  board: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    width: 288,
-    alignSelf: 'center',
-    marginVertical: s.lg,
-  },
-  cell: {
-    width: 96,
-    height: 96,
-    borderWidth: 2,
-    borderColor: c.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: c.surface,
-  },
-  mark: { fontSize: 48, fontWeight: '800', color: c.accentCoral },
   result: { marginBottom: s.md },
 });

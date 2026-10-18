@@ -33,6 +33,7 @@ import {
   SWEEP_BATCH,
 } from './matches.constants.js';
 import { invalidState, notFound, staleVersion } from './match-errors.js';
+import { assertBestOf } from './best-of.js';
 import { EntryService, ENDED_STATUSES } from './entry.service.js';
 import { toMatchView, type MatchRecord, type ProfileLookup } from './match.view.js';
 import type { AnySeat, Change, EventDraft, Outcome } from './match-changes.js';
@@ -48,6 +49,8 @@ export interface CreateMatchInput {
   openingSeat?: AnySeat;
   /** Bonus coins every human pays; 0 or missing for a free match. Never with bots. */
   entryFee?: number;
+  /** Tic-tac-toe only: 1 = single game, 3 = best of three (default). */
+  bestOf?: 1 | 3;
 }
 
 const BOT_TO_DB: Record<'easy' | 'medium' | 'hard', BotLevel> = {
@@ -297,6 +300,7 @@ export class MatchesService implements OnModuleInit {
       }
 
       const fee = input.entryFee ?? 0;
+      assertBestOf(input.gameId, input.bestOf ?? 3);
       await this.entry.assertAllowed(tx, {
         fee,
         kind: input.kind,
@@ -308,6 +312,7 @@ export class MatchesService implements OnModuleInit {
           gameId: input.gameId,
           kind: input.kind,
           entryFee: fee,
+          bestOf: input.bestOf ?? 3,
           status: 'READY',
           version: 1,
           openingSeat: input.openingSeat ?? 0,
@@ -530,6 +535,7 @@ export class MatchesService implements OnModuleInit {
             seats,
             openingSeat,
             entryFee: current.entryFee,
+            bestOf: current.bestOf === 1 ? 1 : 3,
           },
           tx,
         );
@@ -714,6 +720,7 @@ export class MatchesService implements OnModuleInit {
     gameId: GameId,
     level: BotLevelName,
     players = 2,
+    bestOf: 1 | 3 = 3,
   ): Promise<MatchView> {
     this.consumeAction(userId);
     const fixed = driverFor(gameId).fixedPlayerCount;
@@ -743,6 +750,7 @@ export class MatchesService implements OnModuleInit {
             ...Array.from({ length: players - 1 }, (): SeatSpec => ({ bot: BOT_TO_DB[level] })),
           ],
           openingSeat: randomInt(0, players) as AnySeat,
+          bestOf,
         },
         tx,
       );

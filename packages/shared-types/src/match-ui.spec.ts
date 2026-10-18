@@ -34,6 +34,7 @@ function player(seat: 0 | 1, over: Partial<MatchPlayerView> = {}): MatchPlayerVi
 
 function series(over: Partial<MatchSeriesView> = {}): MatchSeriesView {
   return {
+    bestOf: 3,
     phase: 'playing',
     gameNumber: 1,
     firstSeat: 0,
@@ -248,6 +249,7 @@ describe('scoreLine', () => {
     );
     expect(scoreLine(match({ mySeat: 1, series: series({ wins: [1, 2] }) }))).toBe('2 – 1');
     expect(scoreLine(match({ series: null }))).toBe('');
+    expect(scoreLine(match({ series: series({ bestOf: 1, wins: [1, 0] }) }))).toBe('');
   });
 });
 

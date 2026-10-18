@@ -6,9 +6,20 @@ import {
   type TicTacToeState,
 } from './tictactoe.js';
 
-/** Best of three games; first to two wins. A turn that runs out of time loses that game. */
+/**
+ * A match is one game or best of three (first to two wins). A turn that runs out of time loses
+ * that game. Best of three is the default.
+ */
+export type BestOf = 1 | 3;
+export const BEST_OF_VALUES: readonly BestOf[] = [1, 3];
+export const DEFAULT_BEST_OF: BestOf = 3;
 export const SERIES_MAX_GAMES = 3;
 export const WINS_NEEDED = 2;
+
+/** Wins that settle a series of this length. */
+export function winsNeeded(bestOf: BestOf): number {
+  return bestOf === 1 ? 1 : WINS_NEEDED;
+}
 export const TURN_TIMER_MS = 20_000;
 export const MAX_CONSECUTIVE_TIMEOUTS = 2;
 
@@ -27,6 +38,8 @@ export interface GameRecord {
 }
 
 export interface SeriesState {
+  /** Games in the series: 1 (one game decides) or 3 (first to two wins). */
+  readonly bestOf: BestOf;
   readonly phase: SeriesPhase;
   /** The seat that moves first (plays X) in the current or just-finished game. */
   readonly firstSeat: Seat;
@@ -50,8 +63,9 @@ export function otherSeat(seat: Seat): Seat {
   return seat === 0 ? 1 : 0;
 }
 
-export function createSeries(firstSeat: Seat = 0): SeriesState {
+export function createSeries(firstSeat: Seat = 0, bestOf: BestOf = DEFAULT_BEST_OF): SeriesState {
   return {
+    bestOf,
     phase: 'playing',
     firstSeat,
     gameNumber: 1,
@@ -112,8 +126,9 @@ function finishGame(
     return { ...base, phase: 'completed', winner: result, endReason: 'forfeit' };
   }
 
-  const reachedTarget = wins[0] >= WINS_NEEDED || wins[1] >= WINS_NEEDED;
-  if (reachedTarget || series.gameNumber >= SERIES_MAX_GAMES) {
+  const target = winsNeeded(series.bestOf);
+  const reachedTarget = wins[0] >= target || wins[1] >= target;
+  if (reachedTarget || series.gameNumber >= series.bestOf) {
     const winner: Seat | 'draw' = wins[0] === wins[1] ? 'draw' : wins[0] > wins[1] ? 0 : 1;
     return { ...base, phase: 'completed', winner, endReason: 'score' };
   }
@@ -207,7 +222,7 @@ export function startNextGame(series: SeriesState): SeriesResult {
 
 /** A fresh series; the opening seat keeps alternating from where the last series stopped. */
 export function createRematch(previous: SeriesState): SeriesState {
-  return createSeries(otherSeat(previous.firstSeat));
+  return createSeries(otherSeat(previous.firstSeat), previous.bestOf);
 }
 
 /** Ranking score for a seat: win 1, draw 0.5, loss 0. Only defined once the series is over. */

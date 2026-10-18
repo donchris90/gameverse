@@ -24,7 +24,9 @@ import type { MatchRecord } from './match.view.js';
 /** The tic-tac-toe series of a match; null for other games and before the match starts. */
 export function seriesOf(match: Pick<GameMatch, 'gameId' | 'state'>): SeriesState | null {
   if (match.gameId !== 'tictactoe' || match.state === null) return null;
-  return match.state as unknown as SeriesState;
+  // A series saved before match length existed was always best of three.
+  const saved = match.state as unknown as Omit<SeriesState, 'bestOf'> & { bestOf?: 1 | 3 };
+  return { ...saved, bestOf: saved.bestOf ?? 3 };
 }
 
 function toJson(series: SeriesState): Prisma.InputJsonValue {
@@ -69,7 +71,7 @@ export const ticTacToeDriver: GameDriver = {
   fixedPlayerCount: 2,
 
   start(match: MatchRecord, now: Date): StartResult {
-    const series = createSeries(match.openingSeat as Seat);
+    const series = createSeries(match.openingSeat as Seat, match.bestOf === 1 ? 1 : 3);
     return {
       state: toJson(series),
       deadlineAt: new Date(now.getTime() + TURN_TIMER_MS),

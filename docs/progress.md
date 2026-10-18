@@ -428,3 +428,16 @@ One full integration run had a single `concurrency-matches` failure with the err
   - Mutation checks (broken on purpose, tests failed, code restored): pot key made non-idempotent (1 failed), refund amount wrong (3 failed), kill switch disabled (1 failed).
 - Not verified: all new mobile screens on a phone, the admin switch in a browser, the migration on Render (applied by the redeploy), a stuck-match case where a player's coins are removed by an admin after a search starts (the pairing step skips players who cannot pay).
 - Next exact action: slice 8C (Tic-tac-toe port), or owner device check of 8A and 8B first.
+
+## Slice 8C: Tic-tac-toe port (built, verified on the server side; not seen on a phone)
+
+- Finding: our Tic-tac-toe already had Easy/Medium/Hard bots and best of three, so the port was smaller than planned. Ported from RRYDA `ox.rules.ts`: Easy and Medium behaviour (decision #115), the single-game option, and the look (dark framed board, neon X/O, pop-in mark, player cards with win pips) in `apps/mobile/src/tictactoe/TttBoard.tsx`, drawn with plain React Native views (no new native module, no new dev build).
+- Single game: `bestOf` 1 or 3 in the series rules, migration `20261024000000_best_of` on matches, rooms and queue entries, carried by quick match, rooms, invites, bot games and rematch. Game screen has "Single game / Best of 3" for tic-tac-toe.
+- Verified, real output:
+  - `PRISMA_SCHEMA_ENGINE_BINARY=/bin/true pnpm exec turbo run lint typecheck build test --env-mode=loose --continue`: Tasks: 22 successful, 22 total (game-rules 194 tests, shared-types 182, API unit 145).
+  - `pnpm exec vitest run --config ./vitest.config.e2e.ts` in `apps/api`: Test Files 33 passed, Tests 640 passed (630 before + 10 in `test/best-of.e2e-spec.ts`), seen on repeated runs.
+  - One full-suite run earlier failed `matches-bot ... ends a running search, but refuses while a room is open` once and passed in every later run (alone twice, full suite three times). Cause not found; treat as a possible timing flake and watch it.
+  - Mutation check: driver ignoring `bestOf` made 4 of the 10 new tests fail; code restored.
+- Not verified: the new board and player cards on a phone, bot strength by feel, the single-game picker.
+- RRYDA's "Party Room" spectator view and its stake modes are not ported (out of scope).
+- Next exact action: slice 8D (Ludo port), after reading RRYDA `ludo-payout.ts` and listing rule differences for approval.

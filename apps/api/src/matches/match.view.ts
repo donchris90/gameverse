@@ -34,6 +34,7 @@ const BOT_LEVELS: Record<'EASY' | 'MEDIUM' | 'HARD', BotLevelName> = {
 
 function toSeriesView(series: SeriesState): MatchSeriesView {
   return {
+    bestOf: series.bestOf,
     phase: series.phase,
     gameNumber: series.gameNumber,
     firstSeat: series.firstSeat,

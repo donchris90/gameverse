@@ -1,5 +1,11 @@
 import { z } from 'zod';
-import { GAME_IDS, type GameId, type MatchView } from './matches.js';
+import {
+  GAME_IDS,
+  bestOfSchema,
+  type BestOfChoice,
+  type GameId,
+  type MatchView,
+} from './matches.js';
 import { entryFeeSchema } from './wallet.js';
 
 export const ROOM_CODE_LENGTH = 6;
@@ -29,6 +35,8 @@ export interface RoomView {
   seats: number;
   /** Bonus coins every player pays to play; 0 for a free room. */
   entryFee: number;
+  /** Tic-tac-toe: 1 = single game, 3 = best of three. Other games ignore it. */
+  bestOf: BestOfChoice;
   /** Guests who joined with the code, in the order they joined. The host is not listed. */
   members: RoomPartyView[];
   expiresAt: string;
@@ -47,12 +55,18 @@ export const createRoomSchema = z
     gameId: z.enum(GAME_IDS),
     players: seatsField.optional(),
     entryFee: entryFeeSchema.optional(),
+    bestOf: bestOfSchema.optional(),
   })
   .strict();
 export type CreateRoomRequest = z.input<typeof createRoomSchema>;
 
 export const inviteFriendSchema = z
-  .object({ gameId: z.enum(GAME_IDS), friendUserId: z.uuid(), entryFee: entryFeeSchema.optional() })
+  .object({
+    gameId: z.enum(GAME_IDS),
+    friendUserId: z.uuid(),
+    entryFee: entryFeeSchema.optional(),
+    bestOf: bestOfSchema.optional(),
+  })
   .strict();
 export type InviteFriendRequest = z.input<typeof inviteFriendSchema>;
 
@@ -89,6 +103,7 @@ export const joinQueueSchema = z
     gameId: z.enum(GAME_IDS),
     players: seatsField.optional(),
     entryFee: entryFeeSchema.optional(),
+    bestOf: bestOfSchema.optional(),
   })
   .strict();
 export type JoinQueueRequest = z.input<typeof joinQueueSchema>;
@@ -108,6 +123,7 @@ export interface MatchmakingStatus {
     players: number;
     /** Bonus coins each player pays; 0 for a free match. */
     entryFee: number;
+    bestOf: BestOfChoice;
     joinedAt: string;
     waitedMs: number;
     /** Rating difference currently accepted; widens the longer the search runs. */

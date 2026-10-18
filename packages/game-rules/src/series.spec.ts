@@ -229,3 +229,46 @@ describe('series', () => {
     }
   });
 });
+
+describe('a single game (best of 1)', () => {
+  it('is over as soon as one game is won', () => {
+    const done = playCells(createSeries(0, 1), FIRST_WINS);
+    expect(done.phase).toBe('completed');
+    expect(done.winner).toBe(0);
+    expect(done.endReason).toBe('score');
+    expect(done.wins).toEqual([1, 0]);
+    expect(seriesScore(done, 0)).toBe(1);
+    expect(seriesScore(done, 1)).toBe(0);
+  });
+
+  it('is over when the second mover wins too', () => {
+    const done = playCells(createSeries(0, 1), SECOND_WINS);
+    expect(done.phase).toBe('completed');
+    expect(done.winner).toBe(1);
+  });
+
+  it('ends a drawn game as a drawn match, with no replay', () => {
+    const done = playCells(createSeries(0, 1), DRAW);
+    expect(done.phase).toBe('completed');
+    expect(done.winner).toBe('draw');
+    expect(done.draws).toBe(1);
+    expect(startNextGame(done)).toEqual({ ok: false, error: 'SERIES_NOT_PLAYING' });
+  });
+
+  it('is lost by one timeout', () => {
+    const done = must(timeoutTurn(createSeries(0, 1), 0));
+    expect(done.phase).toBe('completed');
+    expect(done.winner).toBe(1);
+  });
+
+  it('keeps its length for a rematch, and best of three stays the default', () => {
+    expect(createRematch(createSeries(0, 1)).bestOf).toBe(1);
+    expect(createSeries().bestOf).toBe(3);
+    expect(createRematch(createSeries(0)).bestOf).toBe(3);
+  });
+
+  it('best of three still needs two wins', () => {
+    const mid = playCells(createSeries(0, 3), FIRST_WINS);
+    expect(mid.phase).toBe('between_games');
+  });
+});
