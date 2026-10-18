@@ -116,7 +116,7 @@ describe('lobby (matchmaking, private rooms, friend invites)', () => {
 
     it('rejects unknown games and unknown fields', async () => {
       const [a] = await players(1);
-      const unknownGame = await join(a as SocialUser, 'ludo');
+      const unknownGame = await join(a as SocialUser, 'chess');
       expect(unknownGame.status).toBe(400);
       const extra = await request(t.server)
         .post('/v1/matchmaking/join')

@@ -74,7 +74,7 @@ export type LeaderboardQuery = z.output<typeof leaderboardQuerySchema>;
 export interface MatchResultView {
   ranked: boolean;
   players: {
-    seat: 0 | 1;
+    seat: 0 | 1 | 2 | 3;
     userId: string | null;
     ratingBefore: number | null;
     ratingAfter: number | null;

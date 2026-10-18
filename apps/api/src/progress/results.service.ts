@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
+import { ludoOf } from '../matches/ludo-driver.js';
 import {
   DEFAULT_RATING,
+  RATING_FLOOR,
   ratingAfter,
   seriesScore,
   type Seat,
@@ -13,6 +15,7 @@ import {
   BOT_XP_MATCHES_PER_DAY,
   DAY_MS,
   RATED_PAIR_LIMIT,
+  ludoXpFor,
   startOfUtcDay,
   xpFor,
 } from './xp.policy.js';
@@ -28,6 +31,7 @@ type Completed = GameMatch & { players: GameMatchPlayer[] };
 export class ResultsService {
   async record(tx: Tx, match: Completed): Promise<void> {
     if (match.status !== 'COMPLETED') return;
+    if (match.gameId === 'ludo') return this.recordLudo(tx, match);
     const series = match.state as SeriesState | null;
     if (series === null || series.phase !== 'completed') return;
     if (await tx.gameResult.findUnique({ where: { matchId: match.id }, select: { id: true } })) {
@@ -145,6 +149,133 @@ export class ResultsService {
         });
       }
       if (match.kind !== 'BOT') await this.addStatistics(tx, row.userId, match.gameId, row.score);
+      if (row.xp > 0) {
+        await tx.playerExperience.upsert({
+          where: { userId: row.userId },
+          create: { userId: row.userId, xp: row.xp },
+          update: { xp: { increment: row.xp } },
+        });
+      }
+    }
+  }
+
+  /** Ludo: placings decide everything. Ratings are Elo against each other human, averaged. */
+  private async recordLudo(tx: Tx, match: Completed): Promise<void> {
+    const game = ludoOf(match);
+    if (game === null || game.phase !== 'finished' || game.placings === null) return;
+    if (await tx.gameResult.findUnique({ where: { matchId: match.id }, select: { id: true } })) {
+      return;
+    }
+    const placings = game.placings;
+    const endedAt = match.endedAt ?? new Date();
+    const seats = [...match.players].sort((a, b) => a.seat - b.seat);
+    const humans = seats.filter((player) => player.userId !== null);
+    const everyoneHuman = humans.length === seats.length;
+    const ranked = match.kind === 'QUICK' && everyoneHuman && humans.length >= 2;
+    const groupKey = everyoneHuman
+      ? humans
+          .map((player) => player.userId ?? '')
+          .sort()
+          .join(':')
+      : null;
+
+    let ratingApplied = false;
+    if (ranked && groupKey !== null) {
+      const recent = await tx.gameResult.count({
+        where: {
+          pairKey: groupKey,
+          ratingApplied: true,
+          endedAt: { gt: new Date(endedAt.getTime() - DAY_MS) },
+        },
+      });
+      ratingApplied = recent < RATED_PAIR_LIMIT;
+    }
+
+    const before = new Map<string, { rating: number; ratedGames: number }>();
+    if (ratingApplied) {
+      for (const player of humans) {
+        const row = await tx.playerRating.findUnique({
+          where: { userId_gameId: { userId: player.userId ?? '', gameId: match.gameId } },
+        });
+        before.set(player.userId ?? '', {
+          rating: row?.rating ?? DEFAULT_RATING,
+          ratedGames: row?.ratedGames ?? 0,
+        });
+      }
+    }
+
+    const dayStart = startOfUtcDay(endedAt);
+    const count = seats.length;
+    const rows: {
+      seat: number;
+      userId: string | null;
+      score: number;
+      ratingBefore: number | null;
+      ratingAfter: number | null;
+      xp: number;
+    }[] = [];
+    for (const player of seats) {
+      const place = placings.indexOf(player.seat as 0 | 1 | 2 | 3);
+      const score = count > 1 ? (count - 1 - place) / (count - 1) : 1;
+      const userId = player.userId;
+      let ratingBefore: number | null = null;
+      let ratingNow: number | null = null;
+      const own = userId === null ? undefined : before.get(userId);
+      if (ratingApplied && userId !== null && own) {
+        let total = 0;
+        for (const other of humans) {
+          if (other.seat === player.seat) continue;
+          const opponent = before.get(other.userId ?? '');
+          if (!opponent) continue;
+          const otherPlace = placings.indexOf(other.seat as 0 | 1 | 2 | 3);
+          const result = place < otherPlace ? 1 : 0;
+          total += ratingAfter(own.rating, opponent.rating, result, own.ratedGames) - own.rating;
+        }
+        ratingBefore = own.rating;
+        ratingNow = Math.max(RATING_FLOOR, Math.round(own.rating + total / (humans.length - 1)));
+      }
+      let xp = 0;
+      if (userId !== null) {
+        const walkedAway = game.removed.includes(player.seat as 0 | 1 | 2 | 3);
+        xp = ludoXpFor(match.kind, place, walkedAway);
+        if (xp > 0 && match.kind === 'BOT') {
+          const earlier = await tx.gameResultPlayer.count({
+            where: { userId, xp: { gt: 0 }, result: { kind: 'BOT', endedAt: { gte: dayStart } } },
+          });
+          if (earlier >= BOT_XP_MATCHES_PER_DAY) xp = 0;
+        }
+      }
+      rows.push({ seat: player.seat, userId, score, ratingBefore, ratingAfter: ratingNow, xp });
+    }
+
+    await tx.gameResult.create({
+      data: {
+        matchId: match.id,
+        gameId: match.gameId,
+        kind: match.kind,
+        ranked,
+        ratingApplied,
+        pairKey: groupKey,
+        endReason: match.endReason,
+        winnerSeat: match.winnerSeat,
+        endedAt,
+        players: { create: rows },
+      },
+    });
+
+    for (const row of rows) {
+      if (row.userId === null) continue;
+      if (row.ratingAfter !== null) {
+        const ratedGames = (before.get(row.userId)?.ratedGames ?? 0) + 1;
+        await tx.playerRating.upsert({
+          where: { userId_gameId: { userId: row.userId, gameId: match.gameId } },
+          create: { userId: row.userId, gameId: match.gameId, rating: row.ratingAfter, ratedGames },
+          update: { rating: row.ratingAfter, ratedGames },
+        });
+      }
+      if (match.kind !== 'BOT') {
+        await this.addStatistics(tx, row.userId, match.gameId, row.score === 1 ? 1 : 0);
+      }
       if (row.xp > 0) {
         await tx.playerExperience.upsert({
           where: { userId: row.userId },

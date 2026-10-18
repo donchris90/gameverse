@@ -8,7 +8,14 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
-import { type MatchView, botMatchSchema, matchIdSchema, moveSchema } from '@gameverse/shared-types';
+import {
+  type MatchView,
+  botMatchSchema,
+  matchIdSchema,
+  moveSchema,
+  rollSchema,
+  tokenMoveSchema,
+} from '@gameverse/shared-types';
 import type { z } from 'zod';
 import type { AuthUser } from '../auth/auth.types.js';
 import { CurrentUser } from '../auth/current-user.decorator.js';
@@ -35,7 +42,7 @@ export class MatchesController {
     @CurrentUser() user: AuthUser,
     @Body(new ZodValidationPipe(botMatchSchema)) body: z.output<typeof botMatchSchema>,
   ): Promise<MatchView> {
-    return this.matches.startBotMatch(user.id, body.gameId, body.level);
+    return this.matches.startBotMatch(user.id, body.gameId, body.level, body.players);
   }
 
   @Get(':id')
@@ -57,6 +64,28 @@ export class MatchesController {
     @Body(new ZodValidationPipe(moveSchema)) body: z.output<typeof moveSchema>,
   ): Promise<MatchView> {
     return this.matches.move(user.id, id, body);
+  }
+
+  /** Ludo: the server rolls the die. */
+  @Post(':id/roll')
+  @HttpCode(HttpStatus.OK)
+  roll(
+    @CurrentUser() user: AuthUser,
+    @idParam() id: string,
+    @Body(new ZodValidationPipe(rollSchema)) body: z.output<typeof rollSchema>,
+  ): Promise<MatchView> {
+    return this.matches.roll(user.id, id, body);
+  }
+
+  /** Ludo: move a token by the die that was rolled. */
+  @Post(':id/token-moves')
+  @HttpCode(HttpStatus.OK)
+  moveToken(
+    @CurrentUser() user: AuthUser,
+    @idParam() id: string,
+    @Body(new ZodValidationPipe(tokenMoveSchema)) body: z.output<typeof tokenMoveSchema>,
+  ): Promise<MatchView> {
+    return this.matches.moveToken(user.id, id, body);
   }
 
   @Post(':id/leave')

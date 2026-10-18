@@ -527,6 +527,9 @@ model GameMatchPlayer {
   /// When the server first saw this human with no open socket during an active match. Cleared on
   /// reconnect; if it stays set for the grace period the series is forfeited.
   disconnectedAt DateTime? @db.Timestamptz(3)
+  /// When this player left or was removed from a game that goes on without them (Ludo with three
+  /// or four players). They no longer count as being in an open match.
+  outAt          DateTime? @db.Timestamptz(3)
 
   match GameMatch @relation(fields: [matchId], references: [id], onDelete: Cascade)
   user  User?     @relation(fields: [userId], references: [id], onDelete: Cascade)

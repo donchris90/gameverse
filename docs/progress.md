@@ -271,3 +271,20 @@ Built: migration `20261019000000_voice` (hand-written; `migrate deploy` and drif
 Mutation checks: API 12/12 caught (membership, open-match, bot, block, limiter, idempotent join, left membership, negative time, sweeper end, timeout, renew time, end time); phone-side 16/16 caught after adding one test (a leave during the microphone prompt) and fixing one mutation pattern.
 
 Not verified (see `docs/voice-verification.md`): Agora accepting our tokens, audio between phones, mute/leave/reconnect on devices, token renewal after 9 minutes, Android foreground service and iOS background audio, low-end Android, report/block in a call, the Phase 0 spike itself. Limit: a blocked player's call is not cut server-side until their next token renewal.
+
+## Phase 4B: Ludo server (2026-10-18)
+
+Ludo matches run on the existing match framework with 2–4 seats: server-side CSPRNG dice, `roll` and `token-moves` actions (idempotent, version-checked), a 20 s turn clock with timeout play and removal after three in a row, leave/forfeit/disconnect handling that keeps 3–4 player games going, labelled bots (2–4 players), generalized rematch with a rotating opener, and placing-based results (N-player Elo, XP, statistics). Ludo stays **disabled** in `games` until 4E.
+
+Verified (run in this environment):
+- `pnpm exec prettier --check .`: all files match.
+- `pnpm turbo run lint typecheck build test --env-mode=loose`: 22/22 tasks successful (game-rules 107 tests).
+- `pnpm --filter @gameverse/api test:integration`: 21 files, 505/505 passed (was 473; `test/ludo.e2e-spec.ts` adds 32, including a full 4-player game, a 4-human ranked game and a walk-away game).
+- `pnpm --filter @gameverse/api smoke:dist`: compiled API up and ready.
+- Mutation checks on the new server code: 11 of 12 caught on first run; the survivors (Ludo idempotency guard aimed at the wrong copy, walker XP, middle-place scores) were re-run after adding tests and are all caught.
+
+Changed on the way: tests that used `ludo` as the "unknown game" now use `chess`; progress and leaderboards hide disabled games (decision #81).
+
+Unverified: migration `20261019120000_ludo_matches` is hand-written and applied by the test setup, not by `prisma migrate deploy`. No device or load run yet for Ludo.
+
+Next: 4C Ludo lobby (rooms for 2–4, public queue, bot fill, invites, rematch).

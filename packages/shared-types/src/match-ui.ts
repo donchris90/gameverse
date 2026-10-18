@@ -87,8 +87,9 @@ export function secondsLeft(atIso: string, offsetMs: number, nowMs: number): num
 export function scoreLine(view: MatchView): string {
   const series = view.series;
   if (series === null) return '';
-  const mine = series.wins[view.mySeat];
-  const theirs = series.wins[view.mySeat === 0 ? 1 : 0];
+  const mySide = view.mySeat === 1 ? 1 : 0;
+  const mine = series.wins[mySide];
+  const theirs = series.wins[mySide === 0 ? 1 : 0];
   const draws = series.draws > 0 ? ` (${String(series.draws)} drawn)` : '';
   return `${String(mine)} – ${String(theirs)}${draws}`;
 }

@@ -24,6 +24,20 @@ export function xpFor(kind: MatchKind, score: 0 | 0.5 | 1, abandoned: boolean): 
   return score === 1 ? row.win : score === 0.5 ? row.draw : row.loss;
 }
 
+/** Ludo XP by finishing place (0 = first) in a quick or friendly game. */
+export const LUDO_XP_BY_PLACE: Record<'QUICK' | 'FRIENDLY', readonly number[]> = {
+  QUICK: [40, 25, 15, 10],
+  FRIENDLY: [20, 12, 8, 5],
+};
+
+/** XP for one Ludo seat. Walking away earns nothing; bot games pay a flat practice amount. */
+export function ludoXpFor(kind: MatchKind, place: number, abandoned: boolean): number {
+  if (abandoned) return 0;
+  if (kind === 'BOT') return XP_TABLE.BOT.win;
+  const table = kind === 'QUICK' ? LUDO_XP_BY_PLACE.QUICK : LUDO_XP_BY_PLACE.FRIENDLY;
+  return table[Math.min(place, table.length - 1)] ?? 0;
+}
+
 export function startOfUtcDay(at: Date): Date {
   return new Date(Date.UTC(at.getUTCFullYear(), at.getUTCMonth(), at.getUTCDate()));
 }

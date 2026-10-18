@@ -1,8 +1,8 @@
 import { z } from 'zod';
 import type { MatchResultView } from './progress.js';
 
-/** Games the server can host. Only tic-tac-toe is playable so far. */
-export const GAME_IDS = ['tictactoe'] as const;
+/** Games the server can host. A game is offered to players only once its `games` row is enabled. */
+export const GAME_IDS = ['tictactoe', 'ludo'] as const;
 export type GameId = (typeof GAME_IDS)[number];
 
 export const MATCH_STATUSES = [
@@ -24,8 +24,11 @@ export type BotLevelName = 'easy' | 'medium' | 'hard';
 /** What the server is currently waiting for, and by when (server clock, ISO time). */
 export type MatchDeadlineKind = 'READY' | 'TURN' | 'NEXT_GAME';
 
+/** A seat is a player's fixed place in a match (tic-tac-toe uses 0-1, Ludo 0-3). */
+export type PlayerSeat = 0 | 1 | 2 | 3;
+
 export interface MatchPlayerView {
-  seat: 0 | 1;
+  seat: PlayerSeat;
   /** Null for a bot. */
   userId: string | null;
   /** Always set for a bot so clients can label it; null for a human. */
@@ -37,6 +40,8 @@ export interface MatchPlayerView {
   connected: boolean;
   /** While disconnected: when the series is forfeited unless they come back. */
   reconnectBy: string | null;
+  /** True once the player has left or been removed from a game that goes on without them (Ludo). */
+  out: boolean;
 }
 
 export interface MatchSeriesView {
@@ -61,6 +66,55 @@ export interface MatchSeriesView {
   endReason: 'score' | 'forfeit' | null;
 }
 
+/** One thing that happened in the last change to a Ludo game, for animation. */
+export interface LudoEventView {
+  type: string;
+  seat?: PlayerSeat;
+  value?: number;
+  token?: number;
+  from?: number;
+  to?: number;
+  victim?: PlayerSeat;
+  place?: number;
+}
+
+export interface LudoMoveView {
+  token: number;
+  from: number;
+  to: number;
+  capturesSeat: PlayerSeat | null;
+  entersFromBase: boolean;
+  reachesHome: boolean;
+}
+
+/**
+ * Ludo state as the phone sees it. Positions are per token and relative to the owner: -1 base,
+ * 0-51 the shared track from the owner's start square, 52-56 the home column, 57 home. The
+ * server computes `moves`, so the phone never has to know the rules.
+ */
+export interface LudoView {
+  phase: 'roll' | 'move' | 'finished';
+  players: 2 | 3 | 4;
+  /** Board colour (0-3) of each seat. */
+  colours: number[];
+  tokens: number[][];
+  /** Seat on turn, or null once the game is over. */
+  toMove: PlayerSeat | null;
+  /** The die waiting to be used (phase 'move'), else null. */
+  roll: number | null;
+  sixes: number;
+  /** Legal moves for the die in `roll`; empty unless phase is 'move'. */
+  moves: LudoMoveView[];
+  finished: PlayerSeat[];
+  removed: PlayerSeat[];
+  /** Final order, first place first, once the game is over. */
+  placings: PlayerSeat[] | null;
+  endReason: 'completed' | 'forfeit' | null;
+  rolls: number;
+  /** What the last change did, oldest first. */
+  lastEvents: LudoEventView[];
+}
+
 export interface MatchView {
   id: string;
   gameId: GameId;
@@ -69,19 +123,21 @@ export interface MatchView {
   /** Increases with every change; send it back as `expectedVersion` with each move. */
   version: number;
   /** The viewer's seat. */
-  mySeat: 0 | 1;
+  mySeat: PlayerSeat;
   players: MatchPlayerView[];
-  /** Null until the match is active. */
+  /** Tic-tac-toe state; null until the match is active and for other games. */
   series: MatchSeriesView | null;
+  /** Ludo state; null until the match is active and for other games. */
+  ludo: LudoView | null;
   deadline: { kind: MatchDeadlineKind; at: string } | null;
   serverTime: string;
   /** Why the match stopped early or finished: score, forfeit, timeout, left, expired. */
   endReason: string | null;
-  winnerSeat: 0 | 1 | null;
-  /** Seats that have asked for a rematch. */
+  winnerSeat: PlayerSeat | null;
   /** What the finished match did to ratings and XP; null while open or if nothing was recorded. */
   result: MatchResultView | null;
-  rematchRequestedBy: (0 | 1)[];
+  /** Seats that have asked for a rematch. */
+  rematchRequestedBy: PlayerSeat[];
   /** Set once the rematch exists. */
   rematchMatchId: string | null;
   createdAt: string;
@@ -109,8 +165,32 @@ export const BOT_LEVELS = ['easy', 'medium', 'hard'] as const;
 
 /** Starts a practice match against a labelled bot. The server picks who opens. */
 export const botMatchSchema = z
-  .object({ gameId: z.enum(GAME_IDS), level: z.enum(BOT_LEVELS) })
+  .object({
+    gameId: z.enum(GAME_IDS),
+    level: z.enum(BOT_LEVELS),
+    /** Ludo only: total seats including the human (the rest are bots). Default 2. */
+    players: z.number().int().min(2).max(4).optional(),
+  })
   .strict();
 export type BotMatchRequest = z.input<typeof botMatchSchema>;
 
 export const emptyActionSchema = z.object({}).strict();
+
+/** Ludo: ask the server to roll the die for you. The phone never chooses a number. */
+export const rollSchema = z
+  .object({
+    clientActionId: z.uuid(),
+    expectedVersion: z.number().int().min(0),
+  })
+  .strict();
+export type RollRequest = z.input<typeof rollSchema>;
+
+/** Ludo: move one of your four tokens by the die you rolled. */
+export const tokenMoveSchema = z
+  .object({
+    token: z.number().int().min(0).max(3),
+    clientActionId: z.uuid(),
+    expectedVersion: z.number().int().min(0),
+  })
+  .strict();
+export type TokenMoveRequest = z.input<typeof tokenMoveSchema>;

@@ -81,6 +81,7 @@ describe('bots in matches', () => {
         ready: true,
         connected: true,
         reconnectBy: null,
+        out: false,
       });
       expect(body.players[0]?.bot).toBeNull();
       const row = await t.prisma.gameMatchPlayer.findUniqueOrThrow({
@@ -107,7 +108,7 @@ describe('bots in matches', () => {
     it('rejects unknown levels, games and fields, and needs sign-in and a profile', async () => {
       const user = await registerWithProfile(t);
       expect((await startBot(user, 'impossible')).status).toBe(400);
-      expect((await startBot(user, 'easy', 'ludo')).status).toBe(400);
+      expect((await startBot(user, 'easy', 'chess')).status).toBe(400);
       const extra = await request(t.server)
         .post('/v1/matches/bot')
         .set(user.auth)

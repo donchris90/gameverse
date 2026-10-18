@@ -27,6 +27,7 @@ function player(seat: 0 | 1, over: Partial<MatchPlayerView> = {}): MatchPlayerVi
     ready: true,
     connected: true,
     reconnectBy: null,
+    out: false,
     ...over,
   };
 }
@@ -58,6 +59,7 @@ function match(over: Partial<MatchView> = {}): MatchView {
     mySeat: 0,
     players: [player(0), player(1)],
     series: series(),
+    ludo: null,
     deadline: null,
     serverTime: '2026-10-18T12:00:00.000Z',
     endReason: null,

@@ -118,7 +118,7 @@ export class RoomsService {
       );
     }
     const open = await tx.gameMatchPlayer.count({
-      where: { userId, match: { status: { in: [...OPEN_STATUSES] } } },
+      where: { userId, outAt: null, match: { status: { in: [...OPEN_STATUSES] } } },
     });
     if (open > 0) {
       throw new AppException(

@@ -1,6 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { HttpStatus, Injectable } from '@nestjs/common';
 import { DEFAULT_RATING } from '@gameverse/game-rules';
 import {
+  ErrorCode,
   GAME_IDS,
   LEADERBOARD_MIN_RATED_GAMES,
   levelForXp,
@@ -11,6 +12,7 @@ import {
   type LeaderboardView,
   type MyProgress,
 } from '@gameverse/shared-types';
+import { AppException } from '../common/app.exception.js';
 import type { Prisma } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 
@@ -19,28 +21,33 @@ export class ProgressService {
   constructor(private readonly prisma: PrismaService) {}
 
   async mine(userId: string): Promise<MyProgress> {
-    const [experience, ratings, statistics] = await Promise.all([
+    const [experience, ratings, statistics, open] = await Promise.all([
       this.prisma.playerExperience.findUnique({ where: { userId } }),
       this.prisma.playerRating.findMany({ where: { userId } }),
       this.prisma.playerStatistics.findMany({ where: { userId } }),
+      // A game that is not playable yet is not shown, not even as an empty row.
+      this.prisma.game.findMany({ where: { enabled: true }, select: { id: true } }),
     ]);
+    const available = new Set(open.map((game) => game.id));
     const xp = experience?.xp ?? 0;
     const level = levelForXp(xp);
-    const games: GameProgress[] = GAME_IDS.map((gameId) => {
-      const rating = ratings.find((row) => row.gameId === gameId);
-      const stats = statistics.find((row) => row.gameId === gameId);
-      return {
-        gameId,
-        rating: rating?.rating ?? DEFAULT_RATING,
-        ratedGames: rating?.ratedGames ?? 0,
-        played: stats?.played ?? 0,
-        wins: stats?.wins ?? 0,
-        losses: stats?.losses ?? 0,
-        draws: stats?.draws ?? 0,
-        winStreak: stats?.winStreak ?? 0,
-        bestWinStreak: stats?.bestWinStreak ?? 0,
-      };
-    });
+    const games: GameProgress[] = GAME_IDS.filter((gameId) => available.has(gameId)).map(
+      (gameId) => {
+        const rating = ratings.find((row) => row.gameId === gameId);
+        const stats = statistics.find((row) => row.gameId === gameId);
+        return {
+          gameId,
+          rating: rating?.rating ?? DEFAULT_RATING,
+          ratedGames: rating?.ratedGames ?? 0,
+          played: stats?.played ?? 0,
+          wins: stats?.wins ?? 0,
+          losses: stats?.losses ?? 0,
+          draws: stats?.draws ?? 0,
+          winStreak: stats?.winStreak ?? 0,
+          bestWinStreak: stats?.bestWinStreak ?? 0,
+        };
+      },
+    );
     return {
       xp,
       level,
@@ -59,6 +66,13 @@ export class ProgressService {
     gameId: GameId,
     query: LeaderboardQuery,
   ): Promise<LeaderboardView> {
+    const game = await this.prisma.game.findUnique({
+      where: { id: gameId },
+      select: { enabled: true },
+    });
+    if (!game?.enabled) {
+      throw new AppException(HttpStatus.NOT_FOUND, ErrorCode.NOT_FOUND, 'Game not found');
+    }
     const blocks = await this.prisma.blockedUser.findMany({
       where: { OR: [{ blockerId: viewerId }, { blockedId: viewerId }] },
       select: { blockerId: true, blockedId: true },

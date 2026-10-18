@@ -93,7 +93,7 @@ export class MatchmakingService {
         await tx.matchQueueEntry.delete({ where: { id: existing.id } });
       }
       const open = await tx.gameMatchPlayer.count({
-        where: { userId, match: { status: { in: [...OPEN_STATUSES] } } },
+        where: { userId, outAt: null, match: { status: { in: [...OPEN_STATUSES] } } },
       });
       if (open > 0) {
         throw new AppException(
@@ -159,7 +159,11 @@ export class MatchmakingService {
       blocks.map((block) => (block.blockerId === entry.userId ? block.blockedId : block.blockerId)),
     );
     const busy = await tx.gameMatchPlayer.findMany({
-      where: { userId: { in: otherIds }, match: { status: { in: [...OPEN_STATUSES] } } },
+      where: {
+        userId: { in: otherIds },
+        outAt: null,
+        match: { status: { in: [...OPEN_STATUSES] } },
+      },
       select: { userId: true },
     });
     const inMatch = new Set(busy.map((row) => row.userId));

@@ -1,6 +1,7 @@
 import {
   DISCONNECT_GRACE_MS,
   type BotLevelName,
+  type PlayerSeat,
   type MatchPlayerView,
   type MatchSeriesView,
   type MatchView,
@@ -13,6 +14,7 @@ import type {
   GameResultPlayer,
 } from '../generated/prisma/client.js';
 import { BOT_AVATAR_ID, BOT_NAME } from './matches.constants.js';
+import { ludoOf, toLudoView } from './ludo-driver.js';
 
 export type MatchRecord = GameMatch & {
   players: GameMatchPlayer[];
@@ -27,8 +29,10 @@ const BOT_LEVELS: Record<'EASY' | 'MEDIUM' | 'HARD', BotLevelName> = {
   HARD: 'hard',
 };
 
+/** The tic-tac-toe series of a match; null for other games and before the match starts. */
 export function seriesOf(match: GameMatch): SeriesState | null {
-  return match.state === null ? null : (match.state as unknown as SeriesState);
+  if (match.gameId === 'ludo' || match.state === null) return null;
+  return match.state as unknown as SeriesState;
 }
 
 function toSeriesView(series: SeriesState): MatchSeriesView {
@@ -53,7 +57,7 @@ function toSeriesView(series: SeriesState): MatchSeriesView {
 }
 
 function toPlayerView(player: GameMatchPlayer, profiles: ProfileLookup): MatchPlayerView {
-  const seat = player.seat as 0 | 1;
+  const seat = player.seat as PlayerSeat;
   if (player.userId === null) {
     return {
       seat,
@@ -64,6 +68,7 @@ function toPlayerView(player: GameMatchPlayer, profiles: ProfileLookup): MatchPl
       ready: player.ready,
       connected: true,
       reconnectBy: null,
+      out: player.outAt !== null,
     };
   }
   const profile = profiles.get(player.userId);
@@ -74,6 +79,7 @@ function toPlayerView(player: GameMatchPlayer, profiles: ProfileLookup): MatchPl
     username: profile?.username ?? 'Player',
     avatarId: profile?.avatarId ?? 'avatar-01',
     ready: player.ready,
+    out: player.outAt !== null,
     connected: player.disconnectedAt === null,
     reconnectBy:
       player.disconnectedAt === null
@@ -85,15 +91,17 @@ function toPlayerView(player: GameMatchPlayer, profiles: ProfileLookup): MatchPl
 /** What `viewerSeat` is allowed to see of a match. Nothing here is secret between the two seats. */
 export function toMatchView(
   match: MatchRecord,
-  viewerSeat: 0 | 1,
+  viewerSeat: PlayerSeat,
   profiles: ProfileLookup,
   now: Date,
 ): MatchView {
   const series = seriesOf(match);
   const mask = match.rematchRequestedMask;
-  const requested: (0 | 1)[] = [];
-  if ((mask & 1) !== 0) requested.push(0);
-  if ((mask & 2) !== 0) requested.push(1);
+  const requested: PlayerSeat[] = [];
+  for (const seat of [0, 1, 2, 3] as const) {
+    if ((mask & (1 << seat)) !== 0) requested.push(seat);
+  }
+  const ludo = ludoOf(match);
   return {
     id: match.id,
     gameId: match.gameId as MatchView['gameId'],
@@ -105,13 +113,14 @@ export function toMatchView(
       .sort((a, b) => a.seat - b.seat)
       .map((player) => toPlayerView(player, profiles)),
     series: series === null ? null : toSeriesView(series),
+    ludo: ludo === null ? null : toLudoView(ludo),
     deadline:
       match.deadlineKind === null || match.deadlineAt === null
         ? null
         : { kind: match.deadlineKind, at: match.deadlineAt.toISOString() },
     serverTime: now.toISOString(),
     endReason: match.endReason,
-    winnerSeat: match.winnerSeat === null ? null : (match.winnerSeat as 0 | 1),
+    winnerSeat: match.winnerSeat === null ? null : (match.winnerSeat as PlayerSeat),
     result:
       match.result === undefined || match.result === null
         ? null
@@ -120,7 +129,7 @@ export function toMatchView(
             players: [...match.result.players]
               .sort((a, b) => a.seat - b.seat)
               .map((row) => ({
-                seat: row.seat as 0 | 1,
+                seat: row.seat as PlayerSeat,
                 userId: row.userId,
                 ratingBefore: row.ratingBefore,
                 ratingAfter: row.ratingAfter,

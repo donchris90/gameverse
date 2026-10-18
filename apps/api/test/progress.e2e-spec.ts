@@ -512,7 +512,7 @@ describe('ratings, XP, statistics and leaderboards', () => {
         expect((await board(a as SocialUser, query)).status, query).toBe(400);
       }
       await request(t.server)
-        .get('/v1/leaderboards/ludo')
+        .get('/v1/leaderboards/chess')
         .set((a as SocialUser).auth)
         .expect(400);
     });
