@@ -1,5 +1,5 @@
 import * as SecureStore from 'expo-secure-store';
-import type { AuthSession } from '@gameverse/shared-types';
+import { retryDelayMs, shouldRetry, type AuthSession } from '@gameverse/shared-types';
 
 export const API_URL = (process.env['EXPO_PUBLIC_API_URL'] ?? 'http://localhost:3000').replace(
   /\/+$/,
@@ -113,8 +113,9 @@ export function refreshSession(): Promise<boolean> {
 export async function request<T>(
   method: string,
   path: string,
-  options: { body?: unknown; auth?: boolean; retry?: boolean } = {},
+  options: { body?: unknown; auth?: boolean; retry?: boolean; attempt?: number } = {},
 ): Promise<T> {
+  const attempt = options.attempt ?? 1;
   const auth = options.auth ?? true;
   const headers: Record<string, string> = {};
   if (options.body !== undefined) headers['Content-Type'] = 'application/json';
@@ -133,9 +134,14 @@ export async function request<T>(
 
   if (response.status === 401 && auth && (options.retry ?? true)) {
     const refreshed = await refreshSession();
-    if (refreshed) return request<T>(method, path, { ...options, retry: false });
+    if (refreshed) return request<T>(method, path, { ...options, retry: false, attempt });
     await clearSession();
     onSignedOut?.();
+  }
+  if (shouldRetry(response.status, attempt)) {
+    // 503 = the server rolled the request back under contention, so sending it again is safe.
+    await new Promise((resolve) => setTimeout(resolve, retryDelayMs(attempt, Math.random)));
+    return request<T>(method, path, { ...options, attempt: attempt + 1 });
   }
   if (!response.ok) throw await parseError(response);
   if (response.status === 204) return undefined as T;
