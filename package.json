@@ -14,7 +14,7 @@
     "test:integration": "turbo run test:integration",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "eas-build-post-install": "pnpm --filter @gameverse/shared-types --filter @gameverse/design-system build"
+    "eas-build-post-install": "pnpm --filter @gameverse/shared-types --filter @gameverse/design-system --filter @gameverse/game-rules build"
   },
   "devDependencies": {
     "prettier": "^3.4.2",

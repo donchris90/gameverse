@@ -6,3 +6,6 @@ pnpm-lock.yaml
 apps/api/src/generated
 apps/api/prisma/migrations
 docs/master-build-spec-original.md
+apps/api/.agents
+apps/api/.claude
+apps/api/.windsurf
