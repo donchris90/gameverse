@@ -10,30 +10,6 @@ import {
   type RollRequest,
   type TokenMoveRequest,
 } from '@gameverse/shared-types';
-import {
-  LUDO_TURN_TIMER_MS,
-  TURN_TIMER_MS,
-  applyLudoMove,
-  applyLudoRoll,
-  applyLudoTimeout,
-  chooseBotMove,
-  chooseLudoMove,
-  createLudo,
-  removeLudoSeat,
-  type LudoError,
-  type LudoPlayerCount,
-  type LudoSeat,
-  createRematch,
-  createSeries,
-  forfeitSeries,
-  playMove,
-  seatToMove,
-  startNextGame,
-  timeoutTurn,
-  type Seat,
-  type SeriesError,
-  type SeriesState,
-} from '@gameverse/game-rules';
 import type { WebSocket } from 'ws';
 import { randomInt } from 'node:crypto';
 import { ResultsService } from '../progress/results.service.js';
@@ -43,27 +19,19 @@ import { PrismaService } from '../prisma/prisma.service.js';
 import { RealtimeHub } from '../realtime/realtime.hub.js';
 import { isBlockedEitherWay } from '../social/relationships.js';
 import { runOptimistic, runSerializable, type Tx } from '../social/serializable.js';
-import { botActionId } from './bot-action-id.js';
 import { ActionLimiter } from './action-limiter.js';
+import { driverFor, findDriver, type DriverAction } from './game-driver.js';
 import {
   BOT_THINK_MS,
   ACTION_LIMIT,
   ACTION_WINDOW_MS,
-  NEXT_GAME_DELAY_MS,
   OPEN_STATUSES,
   READY_TIMEOUT_MS,
   SWEEP_BATCH,
 } from './matches.constants.js';
-import { seriesOf, toMatchView, type MatchRecord, type ProfileLookup } from './match.view.js';
+import { invalidState, notFound, staleVersion } from './match-errors.js';
+import { toMatchView, type MatchRecord, type ProfileLookup } from './match.view.js';
 import type { AnySeat, Change, EventDraft, Outcome } from './match-changes.js';
-import {
-  afterLudoChange,
-  ludoEventDrafts,
-  ludoOf,
-  ludoState,
-  ludoToJson,
-  rollDie,
-} from './ludo-driver.js';
 
 export type SeatSpec = { userId: string } | { bot: BotLevel };
 
@@ -76,76 +44,12 @@ export interface CreateMatchInput {
   openingSeat?: AnySeat;
 }
 
-function ludoError(error: LudoError): AppException {
-  switch (error) {
-    case 'NOT_YOUR_TURN':
-      return new AppException(HttpStatus.CONFLICT, ErrorCode.NOT_YOUR_TURN, 'It is not your turn');
-    case 'WRONG_PHASE':
-      return invalidState('Not now: roll the die first, then move a token');
-    case 'GAME_FINISHED':
-    case 'INVALID_SEAT':
-      return invalidState('The match is not accepting moves right now');
-    case 'INVALID_DIE':
-    case 'INVALID_TOKEN':
-    case 'ILLEGAL_MOVE':
-      return new AppException(
-        HttpStatus.CONFLICT,
-        ErrorCode.INVALID_MOVE,
-        'That move is not allowed',
-        { reason: error },
-      );
-  }
-}
-
-/** Seats that have just finished or been removed no longer count as being in the match. */
-function departedSeats(events: readonly { type: string; seat?: unknown }[]): AnySeat[] {
-  return events.flatMap((event) =>
-    (event.type === 'SEAT_REMOVED' || event.type === 'SEAT_FINISHED') &&
-    typeof event.seat === 'number'
-      ? [event.seat as AnySeat]
-      : [],
-  );
-}
-
-function notFound(): AppException {
-  // One answer for "no such match" and "not your match".
-  return new AppException(HttpStatus.NOT_FOUND, ErrorCode.NOT_FOUND, 'Match not found');
-}
-
-function invalidState(message: string): AppException {
-  return new AppException(HttpStatus.CONFLICT, ErrorCode.INVALID_STATE, message);
-}
-
-function seriesError(error: SeriesError): AppException {
-  switch (error) {
-    case 'NOT_YOUR_TURN':
-      return new AppException(HttpStatus.CONFLICT, ErrorCode.NOT_YOUR_TURN, 'It is not your turn');
-    case 'CELL_TAKEN':
-    case 'INVALID_CELL':
-    case 'GAME_OVER':
-      return new AppException(
-        HttpStatus.CONFLICT,
-        ErrorCode.INVALID_MOVE,
-        'That move is not allowed',
-        {
-          reason: error,
-        },
-      );
-    case 'SERIES_NOT_PLAYING':
-      return invalidState('The match is not accepting moves right now');
-  }
-}
-
 const BOT_TO_DB: Record<'easy' | 'medium' | 'hard', BotLevel> = {
   easy: 'EASY',
   medium: 'MEDIUM',
   hard: 'HARD',
 };
 export { BOT_TO_DB };
-
-function toJson(series: SeriesState): Prisma.InputJsonValue {
-  return series as unknown as Prisma.InputJsonValue;
-}
 
 @Injectable()
 export class MatchesService implements OnModuleInit {
@@ -332,7 +236,8 @@ export class MatchesService implements OnModuleInit {
   async createMatch(input: CreateMatchInput, existingTx?: Tx): Promise<string> {
     const run = async (tx: Tx): Promise<string> => {
       const game = await tx.game.findUnique({ where: { id: input.gameId } });
-      if (!game || !game.enabled) {
+      // A game with no driver cannot be played end to end, so it cannot start a match.
+      if (!game || !game.enabled || findDriver(input.gameId) === null) {
         throw new AppException(HttpStatus.NOT_FOUND, ErrorCode.NOT_FOUND, 'Game not found');
       }
       const humans = input.seats.flatMap((seat) => ('userId' in seat ? [seat.userId] : []));
@@ -414,41 +319,6 @@ export class MatchesService implements OnModuleInit {
 
   // ----------------------------------------------------------------- actions
 
-  private afterSeriesChange(series: SeriesState, events: EventDraft[], now: Date): Change['patch'] {
-    const patch: Prisma.GameMatchUncheckedUpdateManyInput = { state: toJson(series) };
-    if (series.phase === 'playing') {
-      patch.deadlineKind = 'TURN';
-      patch.deadlineAt = new Date(now.getTime() + TURN_TIMER_MS);
-    } else if (series.phase === 'between_games') {
-      patch.deadlineKind = 'NEXT_GAME';
-      patch.deadlineAt = new Date(now.getTime() + NEXT_GAME_DELAY_MS);
-    } else {
-      patch.status = 'COMPLETED';
-      patch.deadlineKind = null;
-      patch.deadlineAt = null;
-      patch.endedAt = now;
-      patch.endReason = series.endReason === 'forfeit' ? 'forfeit' : 'score';
-      patch.winnerSeat = series.winner === 'draw' || series.winner === null ? null : series.winner;
-      events.push({
-        type: 'SERIES_ENDED',
-        data: { winner: series.winner, reason: series.endReason, wins: [...series.wins] },
-      });
-    }
-    return patch;
-  }
-
-  /** Events for a game that just ended, derived from the new history entries. */
-  private gameEndedEvents(before: SeriesState, after: SeriesState): EventDraft[] {
-    return after.history.slice(before.history.length).map((record) => ({
-      type: 'GAME_ENDED',
-      data: {
-        gameNumber: record.gameNumber,
-        result: record.result,
-        reason: record.reason,
-      },
-    }));
-  }
-
   async ready(userId: string, matchId: string): Promise<MatchView> {
     this.consumeAction(userId);
     const match = await this.mutate(
@@ -471,24 +341,10 @@ export class MatchesService implements OnModuleInit {
           patch.status = 'ACTIVE';
           patch.startedAt = now;
           patch.deadlineKind = 'TURN';
-          if (current.gameId === 'ludo') {
-            const players = current.players.length as LudoPlayerCount;
-            const game = createLudo(players, current.openingSeat as LudoSeat);
-            events.push({
-              type: 'GAME_STARTED',
-              data: { players, openingSeat: game.toMove },
-            });
-            patch.state = ludoToJson(game, []);
-            patch.deadlineAt = new Date(now.getTime() + LUDO_TURN_TIMER_MS);
-          } else {
-            const series = createSeries(current.openingSeat as Seat);
-            events.push({
-              type: 'GAME_STARTED',
-              data: { gameNumber: 1, firstSeat: series.firstSeat },
-            });
-            patch.state = toJson(series);
-            patch.deadlineAt = new Date(now.getTime() + TURN_TIMER_MS);
-          }
+          const started = driverFor(current.gameId).start(current, now);
+          events.push(...started.events);
+          patch.state = started.state;
+          patch.deadlineAt = started.deadlineAt;
         }
         return { changed: true, change: { patch, readySeat: seat, events } };
       },
@@ -499,87 +355,29 @@ export class MatchesService implements OnModuleInit {
   }
 
   async move(userId: string, matchId: string, request: MoveRequest): Promise<MatchView> {
-    this.consumeAction(userId);
-    const match = await this.mutate(
-      matchId,
-      userId,
-      async (current, tx): Promise<Outcome> => {
-        const seat = this.seatOf(current, userId);
-        if (seat === null) throw notFound();
-
-        // A retry of a move that already went through is acknowledged, never applied twice.
-        const seen = await tx.gameEvent.findUnique({
-          where: {
-            matchId_seat_clientActionId: {
-              matchId: current.id,
-              seat,
-              clientActionId: request.clientActionId,
-            },
-          },
-          select: { id: true },
-        });
-        if (seen) return { changed: false };
-
-        if (current.status !== 'ACTIVE') throw invalidState('The match is not in progress');
-        if (request.expectedVersion !== current.version) {
-          throw new AppException(
-            HttpStatus.CONFLICT,
-            ErrorCode.STALE_MATCH_VERSION,
-            'The match changed; reload it and try again',
-            { version: current.version },
-          );
-        }
-        const before = seriesOf(current);
-        if (before === null) throw invalidState('The match is not in progress');
-
-        const moved = playMove(before, seat as Seat, request.cell);
-        if (!moved.ok) throw seriesError(moved.error);
-
-        const events: EventDraft[] = [
-          {
-            type: 'MOVE',
-            seat,
-            clientActionId: request.clientActionId,
-            data: { cell: request.cell },
-          },
-          ...this.gameEndedEvents(before, moved.series),
-        ];
-        const patch = this.afterSeriesChange(moved.series, events, new Date());
-        return { changed: true, change: { patch, events } };
-      },
-      'optimistic',
-    );
-    if (match === null) throw notFound();
-    return this.viewFor(this.prisma, match, userId);
+    return this.act(userId, matchId, request, { kind: 'place', cell: request.cell });
   }
 
   /** Ludo: the server rolls the die for the player on turn. The phone sends no number. */
   async roll(userId: string, matchId: string, request: RollRequest): Promise<MatchView> {
-    return this.ludoAction(userId, matchId, request, 'ROLLED', (state, seat) =>
-      applyLudoRoll(state, seat, rollDie()),
-    );
+    return this.act(userId, matchId, request, { kind: 'roll' });
   }
 
   /** Ludo: move one token by the die that was rolled. */
   async moveToken(userId: string, matchId: string, request: TokenMoveRequest): Promise<MatchView> {
-    return this.ludoAction(userId, matchId, request, 'MOVED', (state, seat) =>
-      applyLudoMove(state, seat, request.token),
-    );
+    return this.act(userId, matchId, request, { kind: 'token', token: request.token });
   }
 
   /**
-   * The shared path for the two Ludo actions: same idempotency (a retried action id is
-   * acknowledged, never applied twice), same stale-version refusal, same event log as tic-tac-toe.
+   * The one path for every human game action: a retried action id is acknowledged and never
+   * applied twice, a stale version is refused, and the game's driver decides whether the move is
+   * legal. The phone never sends an outcome.
    */
-  private async ludoAction(
+  private async act(
     userId: string,
     matchId: string,
     request: { clientActionId: string; expectedVersion: number },
-    eventType: 'ROLLED' | 'MOVED',
-    apply: (
-      state: ReturnType<typeof ludoState>,
-      seat: LudoSeat,
-    ) => ReturnType<typeof applyLudoRoll>,
+    action: DriverAction,
   ): Promise<MatchView> {
     this.consumeAction(userId);
     const match = await this.mutate(
@@ -602,29 +400,16 @@ export class MatchesService implements OnModuleInit {
         if (seen) return { changed: false };
 
         if (current.status !== 'ACTIVE') throw invalidState('The match is not in progress');
-        if (request.expectedVersion !== current.version) {
-          throw new AppException(
-            HttpStatus.CONFLICT,
-            ErrorCode.STALE_MATCH_VERSION,
-            'The match changed; reload it and try again',
-            { version: current.version },
-          );
-        }
-        const stored = ludoOf(current);
-        if (stored === null) throw invalidState('This match has no dice');
+        if (request.expectedVersion !== current.version) throw staleVersion(current.version);
 
-        const result = apply(ludoState(stored), seat as LudoSeat);
-        if (!result.ok) throw ludoError(result.error);
-        const events = ludoEventDrafts(result.events, {
-          type: eventType,
-          seat: seat as LudoSeat,
-          clientActionId: request.clientActionId,
-        });
-        const patch = afterLudoChange(result.state, result.events, new Date());
-        return {
-          changed: true,
-          change: { patch, events, outSeats: departedSeats(result.events) },
-        };
+        const change = driverFor(current.gameId).act(
+          current,
+          seat,
+          action,
+          request.clientActionId,
+          new Date(),
+        );
+        return { changed: true, change };
       },
       'optimistic',
     );
@@ -656,34 +441,8 @@ export class MatchesService implements OnModuleInit {
       }
       if (current.status !== 'ACTIVE') return { changed: false }; // already over: nothing to leave
 
-      const ludo = ludoOf(current);
-      if (ludo !== null) {
-        const removed = removeLudoSeat(ludoState(ludo), seat as LudoSeat, 'forfeit');
-        if (!removed.ok) return { changed: false }; // already out of the game: nothing to leave
-        const events: EventDraft[] = [
-          { type: 'PLAYER_LEFT', seat },
-          ...ludoEventDrafts(removed.events),
-        ];
-        const patch = afterLudoChange(
-          removed.state,
-          removed.events,
-          now,
-          removed.state.phase === 'finished' ? 'left' : undefined,
-        );
-        return {
-          changed: true,
-          change: { patch, events, outSeats: departedSeats(removed.events) },
-        };
-      }
-
-      const before = seriesOf(current);
-      if (before === null) return { changed: false };
-      const forfeited = forfeitSeries(before, seat as Seat);
-      if (!forfeited.ok) return { changed: false };
-      const events: EventDraft[] = [{ type: 'PLAYER_LEFT', seat }];
-      const patch = this.afterSeriesChange(forfeited.series, events, now);
-      patch.endReason = 'left';
-      return { changed: true, change: { patch, events } };
+      const change = driverFor(current.gameId).leave(current, seat, now, 'left');
+      return change === null ? { changed: false } : { changed: true, change };
     });
     if (match === null) throw notFound();
     return this.viewFor(this.prisma, match, userId);
@@ -713,19 +472,12 @@ export class MatchesService implements OnModuleInit {
       );
       const patch: Prisma.GameMatchUncheckedUpdateManyInput = { rematchRequestedMask: mask };
       if (everyoneAgreed) {
-        const series = seriesOf(current);
         const seats = [...current.players]
           .sort((a, b) => a.seat - b.seat)
           .map((player): SeatSpec =>
             player.userId === null ? { bot: player.botLevel ?? 'EASY' } : { userId: player.userId },
           );
-        // Tic-tac-toe alternates the opener by series; Ludo passes the opening turn clockwise.
-        const openingSeat: AnySeat =
-          current.gameId === 'ludo'
-            ? (((current.openingSeat + 1) % seats.length) as AnySeat)
-            : series === null
-              ? 0
-              : createRematch(series).firstSeat;
+        const openingSeat = driverFor(current.gameId).rematchOpening(current, seats.length);
         const newId = await this.createMatch(
           {
             gameId: current.gameId as GameId,
@@ -771,53 +523,8 @@ export class MatchesService implements OnModuleInit {
         };
       }
 
-      const ludo = ludoOf(current);
-      if (ludo !== null) {
-        if (current.status !== 'ACTIVE' || current.deadlineKind !== 'TURN')
-          return { changed: false };
-        const timedOut = ludo.toMove;
-        const result = applyLudoTimeout(ludoState(ludo), rollDie());
-        if (!result.ok) return { changed: false };
-        const events: EventDraft[] = [
-          { type: 'TIMEOUT', seat: timedOut },
-          ...ludoEventDrafts(result.events),
-        ];
-        const patch = afterLudoChange(result.state, result.events, now);
-        return {
-          changed: true,
-          change: { patch, events, outSeats: departedSeats(result.events) },
-        };
-      }
-
-      const before = seriesOf(current);
-      if (current.status !== 'ACTIVE' || before === null) return { changed: false };
-
-      if (current.deadlineKind === 'TURN') {
-        const seat = seatToMove(before);
-        if (seat === null) return { changed: false };
-        const result = timeoutTurn(before, seat);
-        if (!result.ok) return { changed: false };
-        const events: EventDraft[] = [
-          { type: 'TIMEOUT', seat },
-          ...this.gameEndedEvents(before, result.series),
-        ];
-        const patch = this.afterSeriesChange(result.series, events, now);
-        return { changed: true, change: { patch, events } };
-      }
-
-      if (current.deadlineKind === 'NEXT_GAME') {
-        const next = startNextGame(before);
-        if (!next.ok) return { changed: false };
-        const events: EventDraft[] = [
-          {
-            type: 'GAME_STARTED',
-            data: { gameNumber: next.series.gameNumber, firstSeat: next.series.firstSeat },
-          },
-        ];
-        const patch = this.afterSeriesChange(next.series, events, now);
-        return { changed: true, change: { patch, events } };
-      }
-      return { changed: false };
+      const change = driverFor(current.gameId).deadline(current, now);
+      return change === null ? { changed: false } : { changed: true, change };
     };
 
     // The decision is re-run if the transaction is retried, so only the last run's answer counts.
@@ -943,36 +650,10 @@ export class MatchesService implements OnModuleInit {
       ) {
         return { changed: false };
       }
-      const ludo = ludoOf(current);
-      if (ludo !== null) {
-        const removed = removeLudoSeat(ludoState(ludo), seat as LudoSeat, 'forfeit');
-        if (!removed.ok) return { changed: false };
-        const events: EventDraft[] = [
-          { type: 'PLAYER_DISCONNECTED', seat },
-          ...ludoEventDrafts(removed.events),
-        ];
-        const patch = afterLudoChange(
-          removed.state,
-          removed.events,
-          now,
-          removed.state.phase === 'finished' ? 'disconnected' : undefined,
-        );
-        ended = true;
-        return {
-          changed: true,
-          change: { patch, events, outSeats: departedSeats(removed.events) },
-        };
-      }
-
-      const before = seriesOf(current);
-      if (before === null) return { changed: false };
-      const forfeit = forfeitSeries(before, seat as Seat);
-      if (!forfeit.ok) return { changed: false };
-      const events: EventDraft[] = [{ type: 'PLAYER_DISCONNECTED', seat }];
-      const patch = this.afterSeriesChange(forfeit.series, events, now);
-      patch.endReason = 'disconnected';
+      const change = driverFor(current.gameId).leave(current, seat, now, 'disconnected');
+      if (change === null) return { changed: false };
       ended = true;
-      return { changed: true, change: { patch, events } };
+      return { changed: true, change };
     });
     return ended;
   }
@@ -989,7 +670,8 @@ export class MatchesService implements OnModuleInit {
     players = 2,
   ): Promise<MatchView> {
     this.consumeAction(userId);
-    if (gameId !== 'ludo' && players !== 2) {
+    const fixed = driverFor(gameId).fixedPlayerCount;
+    if (fixed !== undefined && players !== fixed) {
       throw new AppException(
         HttpStatus.BAD_REQUEST,
         ErrorCode.VALIDATION_FAILED,
@@ -1055,63 +737,14 @@ export class MatchesService implements OnModuleInit {
       made = false; // the decision may run again after a rolled-back attempt
       if (current.status !== 'ACTIVE' || current.deadlineKind !== 'TURN') return { changed: false };
       if (current.deadlineAt === null) return { changed: false };
-      const turnStartedAt = current.deadlineAt.getTime() - TURN_TIMER_MS;
+      const driver = driverFor(current.gameId);
+      const turnStartedAt = current.deadlineAt.getTime() - driver.turnTimerMs;
       if (now.getTime() < turnStartedAt + BOT_THINK_MS) return { changed: false };
 
-      const ludo = ludoOf(current);
-      if (ludo !== null) {
-        const seat = ludo.toMove;
-        const bot = current.players.find((candidate) => candidate.seat === seat);
-        if (!bot || bot.userId !== null || bot.botLevel === null) return { changed: false };
-        const state = ludoState(ludo);
-        const eventType = state.phase === 'roll' ? 'ROLLED' : 'MOVED';
-        const level = bot.botLevel.toLowerCase() as BotLevelName;
-        let result;
-        if (state.phase === 'roll') {
-          result = applyLudoRoll(state, seat, rollDie());
-        } else {
-          const token = chooseLudoMove(state, level, () => randomInt(0, 2 ** 30) / 2 ** 30);
-          if (token === null) return { changed: false };
-          result = applyLudoMove(state, seat, token); // the same validator a human move goes through
-        }
-        if (!result.ok) return { changed: false };
-        const events = ludoEventDrafts(result.events, {
-          type: eventType,
-          seat,
-          clientActionId: botActionId(current.id, current.version),
-        });
-        const patch = afterLudoChange(result.state, result.events, now);
-        made = true;
-        return {
-          changed: true,
-          change: { patch, events, outSeats: departedSeats(result.events) },
-        };
-      }
-
-      const before = seriesOf(current);
-      if (before === null) return { changed: false };
-      const seat = seatToMove(before);
-      if (seat === null) return { changed: false };
-      const player = current.players.find((candidate) => candidate.seat === seat);
-      if (!player || player.userId !== null || player.botLevel === null) return { changed: false };
-
-      const level = player.botLevel.toLowerCase() as BotLevelName;
-      const cell = chooseBotMove(before.game, level, () => randomInt(0, 2 ** 30) / 2 ** 30);
-      const result = playMove(before, seat, cell);
-      if (!result.ok) return { changed: false }; // a bot may never force an illegal move through
-
-      const events: EventDraft[] = [
-        {
-          type: 'MOVE',
-          seat,
-          clientActionId: botActionId(current.id, current.version),
-          data: { cell },
-        },
-        ...this.gameEndedEvents(before, result.series),
-      ];
-      const patch = this.afterSeriesChange(result.series, events, now);
+      const change = driver.botMove(current, now);
+      if (change === null) return { changed: false };
       made = true;
-      return { changed: true, change: { patch, events } };
+      return { changed: true, change };
     });
     return made;
   }

@@ -15,6 +15,7 @@ import type {
 } from '../generated/prisma/client.js';
 import { BOT_AVATAR_ID, BOT_NAME } from './matches.constants.js';
 import { ludoOf, toLudoView } from './ludo-driver.js';
+import { seriesOf } from './tictactoe.driver.js';
 
 export type MatchRecord = GameMatch & {
   players: GameMatchPlayer[];
@@ -28,12 +29,6 @@ const BOT_LEVELS: Record<'EASY' | 'MEDIUM' | 'HARD', BotLevelName> = {
   MEDIUM: 'medium',
   HARD: 'hard',
 };
-
-/** The tic-tac-toe series of a match; null for other games and before the match starts. */
-export function seriesOf(match: GameMatch): SeriesState | null {
-  if (match.gameId === 'ludo' || match.state === null) return null;
-  return match.state as unknown as SeriesState;
-}
 
 function toSeriesView(series: SeriesState): MatchSeriesView {
   return {

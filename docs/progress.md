@@ -359,3 +359,10 @@ One full integration run had a single `concurrency-matches` failure with the err
 - Admin game switch (#104): `GET/PATCH /v1/admin/games`, Games tab in the admin. Verified: `admin-games.e2e-spec.ts` 6/6 (mutation-checked on the admin-only rule), full integration run 564/564 twice, turbo 22/22, Prettier clean, and a real browser run against the real API (turned Ludo on with a reason; the database changed and an audit row was written).
 
 **Not verified:** all mobile screens on a device after these changes; the admin Games tab was not run against the deployed Render API.
+
+## Phase 6, slice 6A: game driver interface (2026-10-18)
+
+- Refactor only, no behaviour change. Added `game-driver.ts`, `tictactoe.driver.ts`, `ludo.driver.ts`, `match-errors.ts`, `game-driver.spec.ts`; `matches.service.ts` now calls the driver.
+- Checked: `PRISMA_SCHEMA_ENGINE_BINARY=/bin/true pnpm exec turbo run lint typecheck build test --env-mode=loose` passed (145 API unit tests); `vitest run --config ./vitest.config.e2e.ts` in `apps/api`: 28 files, 564/564 passed (same count as before, no test edited); `scripts/smoke-dist.sh`: "compiled API is up and ready"; `prettier --check .` clean after formatting `apps/mobile/app.json`.
+- Not done: `match.view.ts` and `results.service.ts` still branch on game for the view and the result; they move behind the driver when the first new game needs different fields (6B).
+- Next exact action: Draughts rules doc for owner approval (slice 6B). Owner decisions still open: Draughts variant, Ayo variant, Whot house rules.
