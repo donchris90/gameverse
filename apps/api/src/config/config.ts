@@ -30,6 +30,8 @@ const envSchema = z
     TRUST_PROXY: booleanString,
 
     DATABASE_URL: z.string().min(1, 'is required'),
+    /** Connections the API keeps open to PostgreSQL. Stay under the database's own limit. */
+    DB_POOL_MAX: z.coerce.number().int().min(2).max(100).default(10),
 
     JWT_ACCESS_SECRET: z.string().min(32, 'must be at least 32 characters'),
     ACCESS_TOKEN_TTL_SECONDS: z.coerce.number().int().min(60).max(3600).default(900),
@@ -73,6 +75,8 @@ const envSchema = z
     SENTRY_RELEASE: z.string().trim().min(1).optional(),
 
     RATE_LIMIT_DEFAULT_PER_MIN: z.coerce.number().int().min(1).max(100_000).default(120),
+    /** Friend requests one signed-in session may send per hour (spam brake; pending cap is separate). */
+    RATE_LIMIT_FRIEND_REQUESTS_PER_HOUR: z.coerce.number().int().min(1).max(10_000).default(30),
     RATE_LIMIT_AUTH_PER_MIN: z.coerce.number().int().min(1).max(10_000).default(10),
   })
   .superRefine((config, ctx) => {

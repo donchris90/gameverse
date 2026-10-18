@@ -42,7 +42,7 @@ import type { BotLevel, Prisma } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { RealtimeHub } from '../realtime/realtime.hub.js';
 import { isBlockedEitherWay } from '../social/relationships.js';
-import { runSerializable, type Tx } from '../social/serializable.js';
+import { runOptimistic, runSerializable, type Tx } from '../social/serializable.js';
 import { botActionId } from './bot-action-id.js';
 import { ActionLimiter } from './action-limiter.js';
 import {
@@ -298,8 +298,15 @@ export class MatchesService implements OnModuleInit {
     matchId: string,
     userId: string | null,
     decide: (match: MatchRecord, tx: Tx) => Promise<Outcome> | Outcome,
+    /**
+     * 'optimistic' is for in-match actions whose every invariant lives on the match row (its
+     * version is compare-and-set in `commit`). Anything that can create another match, such as a
+     * rematch, must stay 'serializable' so the one-open-match rule is checked safely.
+     */
+    mode: 'serializable' | 'optimistic' = 'serializable',
   ): Promise<MatchRecord | null> {
-    const result = await runSerializable(this.prisma, async (tx) => {
+    const run = mode === 'optimistic' ? runOptimistic : runSerializable;
+    const result = await run(this.prisma, async (tx) => {
       const match =
         userId === null
           ? await this.load(tx, matchId)
@@ -444,92 +451,104 @@ export class MatchesService implements OnModuleInit {
 
   async ready(userId: string, matchId: string): Promise<MatchView> {
     this.consumeAction(userId);
-    const match = await this.mutate(matchId, userId, (current): Outcome => {
-      const seat = this.seatOf(current, userId);
-      if (seat === null) throw notFound();
-      const me = current.players.find((player) => player.seat === seat);
-      if (me?.ready === true) return { changed: false }; // already ready: a retry changes nothing
-      if (current.status !== 'READY') throw invalidState('This match can no longer be started');
+    const match = await this.mutate(
+      matchId,
+      userId,
+      (current): Outcome => {
+        const seat = this.seatOf(current, userId);
+        if (seat === null) throw notFound();
+        const me = current.players.find((player) => player.seat === seat);
+        if (me?.ready === true) return { changed: false }; // already ready: a retry changes nothing
+        if (current.status !== 'READY') throw invalidState('This match can no longer be started');
 
-      const everyoneReady = current.players.every((player) => player.seat === seat || player.ready);
-      const events: EventDraft[] = [{ type: 'PLAYER_READY', seat }];
-      const patch: Prisma.GameMatchUncheckedUpdateManyInput = {};
-      if (everyoneReady) {
-        const now = new Date();
-        patch.status = 'ACTIVE';
-        patch.startedAt = now;
-        patch.deadlineKind = 'TURN';
-        if (current.gameId === 'ludo') {
-          const players = current.players.length as LudoPlayerCount;
-          const game = createLudo(players, current.openingSeat as LudoSeat);
-          events.push({
-            type: 'GAME_STARTED',
-            data: { players, openingSeat: game.toMove },
-          });
-          patch.state = ludoToJson(game, []);
-          patch.deadlineAt = new Date(now.getTime() + LUDO_TURN_TIMER_MS);
-        } else {
-          const series = createSeries(current.openingSeat as Seat);
-          events.push({
-            type: 'GAME_STARTED',
-            data: { gameNumber: 1, firstSeat: series.firstSeat },
-          });
-          patch.state = toJson(series);
-          patch.deadlineAt = new Date(now.getTime() + TURN_TIMER_MS);
+        const everyoneReady = current.players.every(
+          (player) => player.seat === seat || player.ready,
+        );
+        const events: EventDraft[] = [{ type: 'PLAYER_READY', seat }];
+        const patch: Prisma.GameMatchUncheckedUpdateManyInput = {};
+        if (everyoneReady) {
+          const now = new Date();
+          patch.status = 'ACTIVE';
+          patch.startedAt = now;
+          patch.deadlineKind = 'TURN';
+          if (current.gameId === 'ludo') {
+            const players = current.players.length as LudoPlayerCount;
+            const game = createLudo(players, current.openingSeat as LudoSeat);
+            events.push({
+              type: 'GAME_STARTED',
+              data: { players, openingSeat: game.toMove },
+            });
+            patch.state = ludoToJson(game, []);
+            patch.deadlineAt = new Date(now.getTime() + LUDO_TURN_TIMER_MS);
+          } else {
+            const series = createSeries(current.openingSeat as Seat);
+            events.push({
+              type: 'GAME_STARTED',
+              data: { gameNumber: 1, firstSeat: series.firstSeat },
+            });
+            patch.state = toJson(series);
+            patch.deadlineAt = new Date(now.getTime() + TURN_TIMER_MS);
+          }
         }
-      }
-      return { changed: true, change: { patch, readySeat: seat, events } };
-    });
+        return { changed: true, change: { patch, readySeat: seat, events } };
+      },
+      'optimistic',
+    );
     if (match === null) throw notFound();
     return this.viewFor(this.prisma, match, userId);
   }
 
   async move(userId: string, matchId: string, request: MoveRequest): Promise<MatchView> {
     this.consumeAction(userId);
-    const match = await this.mutate(matchId, userId, async (current, tx): Promise<Outcome> => {
-      const seat = this.seatOf(current, userId);
-      if (seat === null) throw notFound();
+    const match = await this.mutate(
+      matchId,
+      userId,
+      async (current, tx): Promise<Outcome> => {
+        const seat = this.seatOf(current, userId);
+        if (seat === null) throw notFound();
 
-      // A retry of a move that already went through is acknowledged, never applied twice.
-      const seen = await tx.gameEvent.findUnique({
-        where: {
-          matchId_seat_clientActionId: {
-            matchId: current.id,
+        // A retry of a move that already went through is acknowledged, never applied twice.
+        const seen = await tx.gameEvent.findUnique({
+          where: {
+            matchId_seat_clientActionId: {
+              matchId: current.id,
+              seat,
+              clientActionId: request.clientActionId,
+            },
+          },
+          select: { id: true },
+        });
+        if (seen) return { changed: false };
+
+        if (current.status !== 'ACTIVE') throw invalidState('The match is not in progress');
+        if (request.expectedVersion !== current.version) {
+          throw new AppException(
+            HttpStatus.CONFLICT,
+            ErrorCode.STALE_MATCH_VERSION,
+            'The match changed; reload it and try again',
+            { version: current.version },
+          );
+        }
+        const before = seriesOf(current);
+        if (before === null) throw invalidState('The match is not in progress');
+
+        const moved = playMove(before, seat as Seat, request.cell);
+        if (!moved.ok) throw seriesError(moved.error);
+
+        const events: EventDraft[] = [
+          {
+            type: 'MOVE',
             seat,
             clientActionId: request.clientActionId,
+            data: { cell: request.cell },
           },
-        },
-        select: { id: true },
-      });
-      if (seen) return { changed: false };
-
-      if (current.status !== 'ACTIVE') throw invalidState('The match is not in progress');
-      if (request.expectedVersion !== current.version) {
-        throw new AppException(
-          HttpStatus.CONFLICT,
-          ErrorCode.STALE_MATCH_VERSION,
-          'The match changed; reload it and try again',
-          { version: current.version },
-        );
-      }
-      const before = seriesOf(current);
-      if (before === null) throw invalidState('The match is not in progress');
-
-      const moved = playMove(before, seat as Seat, request.cell);
-      if (!moved.ok) throw seriesError(moved.error);
-
-      const events: EventDraft[] = [
-        {
-          type: 'MOVE',
-          seat,
-          clientActionId: request.clientActionId,
-          data: { cell: request.cell },
-        },
-        ...this.gameEndedEvents(before, moved.series),
-      ];
-      const patch = this.afterSeriesChange(moved.series, events, new Date());
-      return { changed: true, change: { patch, events } };
-    });
+          ...this.gameEndedEvents(before, moved.series),
+        ];
+        const patch = this.afterSeriesChange(moved.series, events, new Date());
+        return { changed: true, change: { patch, events } };
+      },
+      'optimistic',
+    );
     if (match === null) throw notFound();
     return this.viewFor(this.prisma, match, userId);
   }
@@ -563,47 +582,52 @@ export class MatchesService implements OnModuleInit {
     ) => ReturnType<typeof applyLudoRoll>,
   ): Promise<MatchView> {
     this.consumeAction(userId);
-    const match = await this.mutate(matchId, userId, async (current, tx): Promise<Outcome> => {
-      const seat = this.seatOf(current, userId);
-      if (seat === null) throw notFound();
+    const match = await this.mutate(
+      matchId,
+      userId,
+      async (current, tx): Promise<Outcome> => {
+        const seat = this.seatOf(current, userId);
+        if (seat === null) throw notFound();
 
-      const seen = await tx.gameEvent.findUnique({
-        where: {
-          matchId_seat_clientActionId: {
-            matchId: current.id,
-            seat,
-            clientActionId: request.clientActionId,
+        const seen = await tx.gameEvent.findUnique({
+          where: {
+            matchId_seat_clientActionId: {
+              matchId: current.id,
+              seat,
+              clientActionId: request.clientActionId,
+            },
           },
-        },
-        select: { id: true },
-      });
-      if (seen) return { changed: false };
+          select: { id: true },
+        });
+        if (seen) return { changed: false };
 
-      if (current.status !== 'ACTIVE') throw invalidState('The match is not in progress');
-      if (request.expectedVersion !== current.version) {
-        throw new AppException(
-          HttpStatus.CONFLICT,
-          ErrorCode.STALE_MATCH_VERSION,
-          'The match changed; reload it and try again',
-          { version: current.version },
-        );
-      }
-      const stored = ludoOf(current);
-      if (stored === null) throw invalidState('This match has no dice');
+        if (current.status !== 'ACTIVE') throw invalidState('The match is not in progress');
+        if (request.expectedVersion !== current.version) {
+          throw new AppException(
+            HttpStatus.CONFLICT,
+            ErrorCode.STALE_MATCH_VERSION,
+            'The match changed; reload it and try again',
+            { version: current.version },
+          );
+        }
+        const stored = ludoOf(current);
+        if (stored === null) throw invalidState('This match has no dice');
 
-      const result = apply(ludoState(stored), seat as LudoSeat);
-      if (!result.ok) throw ludoError(result.error);
-      const events = ludoEventDrafts(result.events, {
-        type: eventType,
-        seat: seat as LudoSeat,
-        clientActionId: request.clientActionId,
-      });
-      const patch = afterLudoChange(result.state, result.events, new Date());
-      return {
-        changed: true,
-        change: { patch, events, outSeats: departedSeats(result.events) },
-      };
-    });
+        const result = apply(ludoState(stored), seat as LudoSeat);
+        if (!result.ok) throw ludoError(result.error);
+        const events = ludoEventDrafts(result.events, {
+          type: eventType,
+          seat: seat as LudoSeat,
+          clientActionId: request.clientActionId,
+        });
+        const patch = afterLudoChange(result.state, result.events, new Date());
+        return {
+          changed: true,
+          change: { patch, events, outSeats: departedSeats(result.events) },
+        };
+      },
+      'optimistic',
+    );
     if (match === null) throw notFound();
     return this.viewFor(this.prisma, match, userId);
   }

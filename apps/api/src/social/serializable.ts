@@ -26,13 +26,36 @@ function isRetryable(error: unknown): boolean {
  * otherwise a friendship could survive a block that committed at the same moment.
  * Errors thrown by `work` itself (AppException, validation) are not retried.
  */
-export async function runSerializable<T>(
+export function runSerializable<T>(
   prisma: PrismaService,
   work: (tx: Tx) => Promise<T>,
 ): Promise<T> {
+  return runWithRetry(prisma, work, 'Serializable');
+}
+
+/**
+ * For state that has exactly one writer-of-record row guarded by a version column (a match): READ
+ * COMMITTED plus a compare-and-set on that row. A concurrent change makes the guarded UPDATE match
+ * zero rows, the caller throws a P2034 conflict, and this retries against fresh data.
+ *
+ * Why not SERIALIZABLE here: PostgreSQL tracks serializable reads per index page, so unrelated
+ * matches whose rows share a page abort each other ("could not serialize"). Under load that made
+ * moves fail with 503 while the CPU sat idle (see docs/load-test.md). Use this only when every
+ * invariant the transaction relies on is protected by the guarded row, never for checks that span
+ * rows of different owners (one open match per player, friendships and blocks).
+ */
+export function runOptimistic<T>(prisma: PrismaService, work: (tx: Tx) => Promise<T>): Promise<T> {
+  return runWithRetry(prisma, work, 'ReadCommitted');
+}
+
+async function runWithRetry<T>(
+  prisma: PrismaService,
+  work: (tx: Tx) => Promise<T>,
+  isolationLevel: 'Serializable' | 'ReadCommitted',
+): Promise<T> {
   for (let attempt = 1; ; attempt += 1) {
     try {
-      return await prisma.$transaction(work, { isolationLevel: 'Serializable' });
+      return await prisma.$transaction(work, { isolationLevel });
     } catch (error) {
       if (!isRetryable(error)) throw error;
       if (attempt >= MAX_ATTEMPTS) {
