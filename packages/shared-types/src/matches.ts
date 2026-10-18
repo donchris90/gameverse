@@ -2,7 +2,7 @@ import { z } from 'zod';
 import type { MatchResultView } from './progress.js';
 
 /** Games the server can host. A game is offered to players only once its `games` row is enabled. */
-export const GAME_IDS = ['tictactoe', 'ludo', 'draughts'] as const;
+export const GAME_IDS = ['tictactoe', 'ludo', 'draughts', 'ayo'] as const;
 export type GameId = (typeof GAME_IDS)[number];
 
 export const MATCH_STATUSES = [
@@ -143,6 +143,41 @@ export interface DraughtsView {
   last: DraughtsMoveView | null;
 }
 
+/** One step of an Ayo turn, in order, so the phone can animate the sowing. */
+export type AyoStepView =
+  | { k: 'lift'; pit: number; count: number }
+  | { k: 'drop'; pit: number }
+  | { k: 'reap'; pit: number; by: PlayerSeat; amount: number; all: boolean };
+
+/**
+ * Ayo state as the phone sees it. Pits are 0-11 counter-clockwise; seat 0 owns 0-5, seat 1 owns
+ * 6-11. The server computes `moves`, so the phone never has to know the rules.
+ */
+export interface AyoView {
+  phase: 'playing' | 'finished';
+  pits: number[];
+  /** Whether each pit is in the ring this round (pits are lost between rounds). */
+  alive: boolean[];
+  /** Seeds each seat has reaped and not yet put back on the board. */
+  stores: [number, number];
+  toMove: PlayerSeat | null;
+  round: number;
+  starter: PlayerSeat;
+  /** Pits the seat on turn may lift. */
+  moves: number[];
+  winner: PlayerSeat | 'draw' | null;
+  endReason: 'one_pit' | 'agreement' | 'timeout' | 'forfeit' | null;
+  /** Seat that has offered to end the game by agreement, if any. */
+  endOffer: PlayerSeat | null;
+  /** True while a player has exactly two pits, when an end by agreement may be offered. */
+  canOfferEnd: boolean;
+  /** Seeds each seat holds in total (store plus own side), for the final count. */
+  totals: [number, number];
+  plies: number;
+  last: { seat: PlayerSeat; pit: number; steps: AyoStepView[] } | null;
+  lastRound: { round: number; winner: PlayerSeat; took: number } | null;
+}
+
 export interface MatchView {
   id: string;
   gameId: GameId;
@@ -159,6 +194,8 @@ export interface MatchView {
   ludo: LudoView | null;
   /** Draughts state; null until the match is active and for other games. */
   draughts: DraughtsView | null;
+  /** Ayo state; null until the match is active and for other games. */
+  ayo: AyoView | null;
   deadline: { kind: MatchDeadlineKind; at: string } | null;
   serverTime: string;
   /** Why the match stopped early or finished: score, forfeit, timeout, left, expired. */
@@ -235,3 +272,23 @@ export const draughtsMoveSchema = z
   })
   .strict();
 export type DraughtsMoveRequest = z.input<typeof draughtsMoveSchema>;
+
+/** Ayo: lift a pit (0-11). The server plays the whole turn and works out the reaps. */
+export const ayoMoveSchema = z
+  .object({
+    pit: z.number().int().min(0).max(11),
+    clientActionId: z.uuid(),
+    expectedVersion: z.number().int().min(0),
+  })
+  .strict();
+export type AyoMoveRequest = z.input<typeof ayoMoveSchema>;
+
+/** Ayo: offer to end the game by agreement, or answer an offer. */
+export const ayoEndSchema = z
+  .object({
+    action: z.enum(['offer', 'accept', 'decline']),
+    clientActionId: z.uuid(),
+    expectedVersion: z.number().int().min(0),
+  })
+  .strict();
+export type AyoEndRequest = z.input<typeof ayoEndSchema>;

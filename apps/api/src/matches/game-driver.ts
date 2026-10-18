@@ -7,6 +7,7 @@ import type { MatchRecord } from './match.view.js';
 import { ludoDriver } from './ludo.driver.js';
 import { ticTacToeDriver } from './tictactoe.driver.js';
 import { draughtsDriver } from './draughts.driver.js';
+import { ayoDriver } from './ayo.driver.js';
 
 /**
  * What a player can ask a game to do. The transport (REST route, later a socket) maps its request
@@ -16,7 +17,9 @@ export type DriverAction =
   | { kind: 'place'; cell: number }
   | { kind: 'roll' }
   | { kind: 'token'; token: number }
-  | { kind: 'draughts'; from: number; path: number[] };
+  | { kind: 'draughts'; from: number; path: number[] }
+  | { kind: 'ayo'; pit: number }
+  | { kind: 'ayo-end'; action: 'offer' | 'accept' | 'decline' };
 
 /** What starting a match produces: the first state, its opening events and the first turn clock. */
 export interface StartResult {
@@ -66,7 +69,7 @@ export interface GameDriver {
   rematchOpening(match: MatchRecord, seatCount: number): AnySeat;
 }
 
-const DRIVERS: readonly GameDriver[] = [ticTacToeDriver, ludoDriver, draughtsDriver];
+const DRIVERS: readonly GameDriver[] = [ticTacToeDriver, ludoDriver, draughtsDriver, ayoDriver];
 
 /** The driver for a game, or null when the server cannot run it. */
 export function findDriver(gameId: string): GameDriver | null {

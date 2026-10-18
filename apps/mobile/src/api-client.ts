@@ -138,6 +138,21 @@ export const games = {
     request<MatchView>('POST', matchPath(id, 'draughts-moves'), {
       body: { from, path, clientActionId, expectedVersion },
     }),
+  /** Ayo: lift a pit (0-11). The server plays the whole turn. */
+  moveAyo: (id: string, pit: number, clientActionId: string, expectedVersion: number) =>
+    request<MatchView>('POST', matchPath(id, 'ayo-moves'), {
+      body: { pit, clientActionId, expectedVersion },
+    }),
+  /** Ayo: offer to end the game by agreement, or answer an offer. */
+  endAyo: (
+    id: string,
+    action: 'offer' | 'accept' | 'decline',
+    clientActionId: string,
+    expectedVersion: number,
+  ) =>
+    request<MatchView>('POST', matchPath(id, 'ayo-end'), {
+      body: { action, clientActionId, expectedVersion },
+    }),
   leave: (id: string) => request<MatchView>('POST', matchPath(id, 'leave'), { body: {} }),
   rematch: (id: string) => request<MatchView>('POST', matchPath(id, 'rematch'), { body: {} }),
   startBot: (gameId: GameId, level: BotLevelName, players?: number) =>

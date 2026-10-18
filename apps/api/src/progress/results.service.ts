@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { ayoOf } from '../matches/ayo.driver.js';
 import { draughtsOf } from '../matches/draughts.driver.js';
 import { ludoOf } from '../matches/ludo-driver.js';
 import {
@@ -35,6 +36,12 @@ type Completed = GameMatch & { players: GameMatchPlayer[] };
 function finalScores(match: Completed): ((seat: Seat) => 0 | 0.5 | 1) | null {
   if (match.gameId === 'draughts') {
     const game = draughtsOf(match);
+    if (game === null || game.phase !== 'finished' || game.winner === null) return null;
+    const winner = game.winner;
+    return (seat) => (winner === 'draw' ? 0.5 : winner === seat ? 1 : 0);
+  }
+  if (match.gameId === 'ayo') {
+    const game = ayoOf(match);
     if (game === null || game.phase !== 'finished' || game.winner === null) return null;
     const winner = game.winner;
     return (seat) => (winner === 'draw' ? 0.5 : winner === seat ? 1 : 0);

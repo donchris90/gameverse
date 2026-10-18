@@ -19,3 +19,4 @@ export * from './voice.js';
 export * from './voice-ui.js';
 export * from './voice-controller.js';
 export * from './draughts-ui.js';
+export * from './ayo-ui.js';

@@ -37,6 +37,13 @@ export const GAME_INFO: Record<GameId, GameInfo> = {
     tags: ['2 players', '10 min'],
     banner: '#4A2E14',
   },
+  ayo: {
+    id: 'ayo',
+    name: 'Ayo',
+    tagline: 'Sow the seeds, reap every four. The classic Yoruba game.',
+    tags: ['2 players', '15 min'],
+    banner: '#3B2A14',
+  },
 };
 
 /** Decorative artwork drawn with plain views; hidden from screen readers. */
@@ -51,9 +58,63 @@ export function GameArt({ gameId, size = 96 }: { gameId: GameId; size?: number }
         <TicTacToeArt size={size} />
       ) : gameId === 'draughts' ? (
         <DraughtsArt size={size} />
+      ) : gameId === 'ayo' ? (
+        <AyoArt size={size} />
       ) : (
         <LudoArt size={size} />
       )}
+    </View>
+  );
+}
+
+function AyoArt({ size }: { size: number }) {
+  const pit = size / 3.4;
+  const counts = [4, 4, 4, 4, 4, 4];
+  return (
+    <View
+      style={{
+        width: size,
+        height: size,
+        borderRadius: 10,
+        backgroundColor: '#6B4A2B',
+        padding: size * 0.06,
+        justifyContent: 'space-evenly',
+      }}
+    >
+      {[0, 1].map((row) => (
+        <View
+          key={row}
+          style={{
+            flexDirection: 'row',
+            flexWrap: 'wrap',
+            gap: size * 0.03,
+            justifyContent: 'center',
+          }}
+        >
+          {counts.slice(0, 3).map((_count, index) => (
+            <View
+              key={index}
+              style={{
+                width: pit * 0.9,
+                height: pit * 0.9,
+                borderRadius: pit,
+                backgroundColor: '#2B1B0D',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <View
+                style={{
+                  width: pit * 0.3,
+                  height: pit * 0.3,
+                  borderRadius: pit,
+                  backgroundColor: '#F4EBD9',
+                }}
+              />
+            </View>
+          ))}
+        </View>
+      ))}
     </View>
   );
 }

@@ -378,3 +378,15 @@ One full integration run had a single `concurrency-matches` failure with the err
 - **Unverified:** the board screen on a phone, touch targets, colours, haptics, and bot strength by feel. Checklist in `docs/draughts-verification.md`. Draughts stays off until the owner plays it and enables it from the admin Games tab.
 - Known gaps: `match.view.ts` and `results.service.ts` still branch per game (moved behind the driver later). Hard bot is about 6 plies with a node cap; its strength has not been measured against people.
 - Next exact action: owner device check, then Ayo rules doc for approval (slice 6C).
+
+## Phase 6, slice 6C: Ayo (2026-10-18)
+
+- Built: `packages/game-rules/src/ayo.ts` and `ayo-bots.ts` (reap-at-four rules, rounds, end by agreement, bots), `apps/api/src/matches/ayo.driver.ts`, routes `POST /v1/matches/:id/ayo-moves` and `/ayo-end`, result recording, migration `20261021000000_ayo` (row added **disabled**), `packages/shared-types/src/ayo-ui.ts`, mobile board `apps/mobile/src/ayo/AyoMatch.tsx` (with a seed-by-seed replay), game art and a Play-tab card ("Coming soon" while off). Rules are in `docs/ayo-rules.md` (approved by the owner), decision #109.
+- Checked (all run in this sandbox):
+  - `PRISMA_SCHEMA_ENGINE_BINARY=/bin/true pnpm exec turbo run lint typecheck build test --env-mode=loose`: 22 of 22 tasks passed (game-rules 30 Ayo tests; shared-types 11 new).
+  - `vitest run --config ./vitest.config.e2e.ts` in `apps/api`: 30 files, 595/595 passed (577 earlier plus 18 new in `ayo.e2e-spec.ts`). A later lint fix touched only that test file; it was re-run alone (18/18) and the gate re-run (22/22).
+  - Mutation checks on the rules, six of six caught: removing the last-seed exception, letting 5+ count as a reap, removing the lap skip, removing the last-eight rule, ignoring seeds in hand when counting the last eight, letting the round winner start the next round. All reverted.
+  - `scripts/smoke-dist.sh`: "compiled API is up and ready". `prettier --check .` clean.
+- Found while testing: a relay can go round in a circle forever. Fix: a relay that returns to a position it was already in ends the turn (decision #109, in the rules doc; the owner has not seen this case). Random play also showed that matches between two random players can run for hundreds of turns because a round moves only a few seeds; there is no round cap. Both are flagged to the owner.
+- **Unverified:** the board screen on a phone, pit size for touch, the replay animation, bot strength by feel, and whether the rules match how people play Ayo locally. Checklist in `docs/ayo-verification.md`. Ayo stays off until the owner enables it from the admin Games tab.
+- Next exact action: owner device check of Draughts and Ayo, then the Whot rules doc for approval (slice 6D).

@@ -18,6 +18,7 @@ import { useEffect, useRef } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { chat, games } from '../../src/api-client';
 import { ApiError } from '../../src/http';
+import { AyoMatch } from '../../src/ayo/AyoMatch';
 import { DraughtsMatch } from '../../src/draughts/DraughtsMatch';
 import { LudoMatch } from '../../src/ludo/LudoMatch';
 import { VoicePanel } from '../../src/VoicePanel';
@@ -88,6 +89,12 @@ export default function MatchScreen() {
   if (match.gameId === 'ludo') {
     return (
       <LudoMatch match={match} apply={apply} refresh={refresh} deadlineSeconds={deadlineSeconds} />
+    );
+  }
+
+  if (match.gameId === 'ayo') {
+    return (
+      <AyoMatch match={match} apply={apply} refresh={refresh} deadlineSeconds={deadlineSeconds} />
     );
   }
 

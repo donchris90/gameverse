@@ -10,6 +10,8 @@ import {
 } from '@nestjs/common';
 import {
   type MatchView,
+  ayoEndSchema,
+  ayoMoveSchema,
   botMatchSchema,
   draughtsMoveSchema,
   matchIdSchema,
@@ -98,6 +100,28 @@ export class MatchesController {
     @Body(new ZodValidationPipe(draughtsMoveSchema)) body: z.output<typeof draughtsMoveSchema>,
   ): Promise<MatchView> {
     return this.matches.moveDraughts(user.id, id, body);
+  }
+
+  /** Ayo: lift a pit. */
+  @Post(':id/ayo-moves')
+  @HttpCode(HttpStatus.OK)
+  moveAyo(
+    @CurrentUser() user: AuthUser,
+    @idParam() id: string,
+    @Body(new ZodValidationPipe(ayoMoveSchema)) body: z.output<typeof ayoMoveSchema>,
+  ): Promise<MatchView> {
+    return this.matches.moveAyo(user.id, id, body);
+  }
+
+  /** Ayo: offer to end by agreement, accept, or decline. */
+  @Post(':id/ayo-end')
+  @HttpCode(HttpStatus.OK)
+  endAyo(
+    @CurrentUser() user: AuthUser,
+    @idParam() id: string,
+    @Body(new ZodValidationPipe(ayoEndSchema)) body: z.output<typeof ayoEndSchema>,
+  ): Promise<MatchView> {
+    return this.matches.endAyo(user.id, id, body);
   }
 
   @Post(':id/leave')

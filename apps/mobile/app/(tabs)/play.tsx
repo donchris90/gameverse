@@ -11,7 +11,7 @@ const c = theme.colors;
 const s = theme.spacing;
 
 /** Order the games appear in. A game shows only when the server lists it as playable. */
-const SHELF: GameId[] = ['tictactoe', 'ludo', 'draughts'];
+const SHELF: GameId[] = ['tictactoe', 'ludo', 'draughts', 'ayo'];
 
 export default function PlayHome() {
   const play = usePlay();

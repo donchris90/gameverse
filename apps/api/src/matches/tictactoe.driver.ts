@@ -78,7 +78,8 @@ export const ticTacToeDriver: GameDriver = {
   },
 
   act(match, seat, action: DriverAction, clientActionId, now): Change {
-    if (action.kind === 'draughts') throw invalidState('This match is played with cells');
+    if (action.kind !== 'place' && action.kind !== 'roll' && action.kind !== 'token')
+      throw invalidState('This match is played with cells');
     if (action.kind !== 'place') throw invalidState('This match has no dice');
     const before = seriesOf(match);
     if (before === null) throw invalidState('The match is not in progress');

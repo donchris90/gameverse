@@ -2,6 +2,8 @@ import { HttpStatus, Injectable, type OnModuleInit } from '@nestjs/common';
 import {
   DISCONNECT_GRACE_MS,
   ErrorCode,
+  type AyoEndRequest,
+  type AyoMoveRequest,
   type BotLevelName,
   type DraughtsMoveRequest,
   type GameId,
@@ -370,6 +372,16 @@ export class MatchesService implements OnModuleInit {
       from: request.from,
       path: [...request.path],
     });
+  }
+
+  /** Ayo: lift a pit; the server plays the whole turn. */
+  async moveAyo(userId: string, matchId: string, request: AyoMoveRequest): Promise<MatchView> {
+    return this.act(userId, matchId, request, { kind: 'ayo', pit: request.pit });
+  }
+
+  /** Ayo: offer to end the game by agreement, or answer an offer. */
+  async endAyo(userId: string, matchId: string, request: AyoEndRequest): Promise<MatchView> {
+    return this.act(userId, matchId, request, { kind: 'ayo-end', action: request.action });
   }
 
   /** Ludo: the server rolls the die for the player on turn. The phone sends no number. */

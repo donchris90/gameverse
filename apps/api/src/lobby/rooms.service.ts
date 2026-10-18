@@ -49,6 +49,7 @@ const GAME_NAMES: Record<GameId, string> = {
   tictactoe: 'Tic-Tac-Toe',
   ludo: 'Ludo',
   draughts: 'Draughts',
+  ayo: 'Ayo',
 };
 
 @Injectable()

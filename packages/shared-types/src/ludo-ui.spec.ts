@@ -75,6 +75,7 @@ function match(over: Partial<MatchView> = {}, game: Partial<LudoView> = {}): Mat
     series: null,
     ludo: ludo(game),
     draughts: null,
+    ayo: null,
     deadline: null,
     serverTime: '2026-10-18T12:00:00.000Z',
     endReason: null,

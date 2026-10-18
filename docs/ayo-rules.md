@@ -1,6 +1,6 @@
 # Ayo (Ayo Olopon) rules - for owner approval
 
-Status: **second draft, nothing built.** Rewritten on 2026-10-18 from the owner's description (reap at four, rounds, pits that run out). Anything marked **(default)** is my guess where the owner has not said; please correct it. Once approved this is the single source for the rules.
+Status: **approved by the owner 2026-10-18 and built in slice 6C (decision #109).** Written from the owner's description (reap at four, rounds, pits that run out). Anything marked **(default)** was my guess where the owner had not said; the three open points at the end were confirmed ("yes that's correct"). This is the single source for the rules.
 
 ## Board
 
@@ -18,9 +18,10 @@ Status: **second draft, nothing built.** Rewritten on 2026-10-18 from the owner'
    - on the opponent's side, **by the last seed of your turn**: you reap it.
      Only exactly 4 counts; 5 or more is not reaped. Sowing carries on after a reap that happened before the last seed.
 4. **Relay.** When the last seed of a lift lands in a pit that already held seeds and did not make 4, lift every seed in that pit (yours or the opponent's) and keep sowing from the next pit. This repeats.
-5. **End of turn.** The turn ends when the last seed lands in an empty pit (it now holds 1), or when the last seed makes a 4 that is reaped. Then the other player moves.
-6. A lift of 12 or more seeds skips the pit it was lifted from on each lap **(default)**.
-7. A move that leaves the opponent with no seeds on the board is allowed **(default)**. If a player has no seed to move when their turn comes, the round ends and the other player takes everything left on the board **(default)**.
+5. **A relay that goes round in a circle.** If a relay would return to a position it has already been in during the same turn, it would never stop, so the turn ends there **(added while building; the owner has not seen this case)**.
+6. **End of turn.** The turn ends when the last seed lands in an empty pit (it now holds 1), or when the last seed makes a 4 that is reaped. Then the other player moves.
+7. A lift of 12 or more seeds skips the pit it was lifted from on each lap **(default)**.
+8. A move that leaves the opponent with no seeds on the board is allowed **(default)**. If a player has no seed to move when their turn comes, the round ends and the other player takes everything left on the board **(default)**.
 
 ## Rounds
 
@@ -49,8 +50,13 @@ Seat 0 lifts pit 0 (4 seeds) and sows pits 1, 2, 3, 4, which each become 5. The 
 
 Unit and property tests: sowing order, relay chains, reaping on own side, the opponent reaping a 4 made mid-sow, the last-seed exception, only-exactly-4, the 8-seed round end taking all 8 (including mid-sowing), refilling pits from the store, the one-pit end, the by-agreement end at two pits, seed count always conserved (board plus both stores equal 48), the 12-seed lap skip. Mutation checks: let 5 count as a reap, remove the last-seed exception. Integration tests as for Draughts.
 
-## Still to confirm
+## Confirmed by the owner (2026-10-18)
 
 1. **Which pits** a player with fewer than six pits keeps (default: the first ones in their row), and whether the board shows the lost pits as blank.
 2. **Who starts** the next round (default: the loser of the last round).
 3. **Reserve seeds** (a store above 24) stay with the player and count in the final total (default).
+
+## Notes from building it
+
+- Two random players can trade rounds for hundreds of turns, because each round moves only a few seeds. A long match is possible; the turn clock keeps each move short. There is no cap on the number of rounds. If long matches turn out to be a problem on real phones, a cap (for example, compare totals after N rounds) is a rule change for the owner to decide.
+- Bots never agree to end a game, so the offer is not shown against a bot; the player can leave instead.
