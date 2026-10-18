@@ -91,7 +91,7 @@ const uuid = () => crypto.randomUUID();
 async function findMatch(a, b) {
   const room = await call('room.create', 'POST', '/v1/rooms', a.token, { gameId: 'tictactoe' });
   const view = await call('room.join', 'POST', '/v1/rooms/join', b.token, { code: room.code });
-  return view.id;
+  return view.match.id; // POST /v1/rooms/join answers { room, match }
 }
 
 async function playMatch(a, b) {
