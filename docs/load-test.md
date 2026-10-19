@@ -71,3 +71,20 @@ Honest reading of the numbers:
 - Voice is not part of this test (Agora carries the audio, not our server).
 - Everything ran on loopback. Mobile networks add latency and reconnects that this does not model.
 - The ceiling is for the API on a shared 2-vCPU machine. Do not quote it as a capacity for hosted plans.
+
+## Paid matches (Phase 8F, 2026-10-19)
+
+Tool: `apps/api/scripts/paid-load.sh` (starts a throwaway database and the compiled API, then runs `scripts/load-test.mjs --fee N`). The script registers players over REST, plays full matches in private rooms, and at the end adds up the coin balances of every player who played: fees go into pots and pots are paid out, so the total must not change. Same single machine as above, no sockets, so these are REST-only numbers and not comparable with the k6 table.
+
+| Run                                              | Fee | Finished | Coin total start / end | 503 retries absorbed | Notes                                                             |
+| ------------------------------------------------ | --- | -------- | ---------------------- | -------------------- | ----------------------------------------------------------------- |
+| Tic-tac-toe, 20 pairs x 2 matches, free baseline | 0   | 40 / 40  | not checked            | 4                    | queue of 40 joined in 2.6 s, move p95 142 ms                      |
+| Tic-tac-toe, 20 pairs x 2 matches                | 50  | 40 / 40  | 20,000 / 20,000        | 13                   | queue of 40 joined in 4.1 s, move p95 146 ms, room.join p95 2.4 s |
+| Ludo, 5 tables of 4 x 1 match                    | 50  | 5 / 5    | 10,000 / 10,000        | 0                    | roll p95 27 ms, token move p95 25 ms; ran 292 s                   |
+
+Reading:
+
+- No coin was created or lost in either paid run, and no match was left unfinished.
+- Paid entry adds work to joins (balance check, fee transfer): queue joins and room joins were slower than the free baseline (queue p50 2.8 s against 1.8 s for 40 simultaneous joins). Move latency did not change. One run each, so treat the difference as indicative.
+- The Ludo `409 STALE_MATCH_VERSION` answers (282 rolls, 941 token moves) come from the script polling and acting at once on a table of four; the server refuses them correctly and the script retries. They are not failures.
+- Not measured: paid matches at the 60 to 75 pair ceiling, paid Ayo, and settlement while the API restarts.

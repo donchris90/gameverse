@@ -188,7 +188,10 @@ describe('bots in matches', () => {
         await service().runBotMoves(tick());
         current = await view(user, id);
       }
-      await move(user, id, 0, current.version).expect(200);
+      // The bot may have opened on cell 0, so play the first free cell.
+      const free = current.series?.board.findIndex((cell) => cell === null) ?? -1;
+      expect(free).toBeGreaterThanOrEqual(0);
+      await move(user, id, free, current.version).expect(200);
       const before = (await view(user, id)).version;
       expect(await service().runBotMoves(tick())).toBe(1);
       expect(await service().runBotMoves(tick())).toBe(0);

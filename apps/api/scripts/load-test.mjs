@@ -2,6 +2,7 @@
 // against a RUNNING API and the script reports request latency and errors.
 //   node scripts/load-test.mjs [--api http://127.0.0.1:3000] [--pairs 20] [--matches 2]
 //   node scripts/load-test.mjs --game ludo [--pairs 10] [--matches 1]   (--pairs = tables of 4)
+//   add --fee 50 to play paid matches (bonus coins) and check that no coin is created or lost
 // The Ludo mode needs the `ludo` game enabled in that database (it ships switched off).
 // Needs a dev/test API with generous rate limits (RATE_LIMIT_*_PER_MIN high). Never point it at
 // production: it registers throwaway accounts.
@@ -13,6 +14,10 @@ const API = arg('api', 'http://127.0.0.1:3000').replace(/\/+$/, '');
 const PAIRS = Number(arg('pairs', '20'));
 const MATCHES = Number(arg('matches', '2'));
 const GAME = arg('game', 'tictactoe');
+const FEE = Number(arg('fee', '0'));
+const feeBody = FEE > 0 ? { entryFee: FEE } : {};
+/** Players whose coins are checked at the end (the queue crowd is left out: its matches never finish). */
+const tracked = [];
 const LUDO = GAME === 'ludo';
 const SEATS = LUDO ? 4 : 2;
 const RUN = Date.now().toString(36);
@@ -68,7 +73,7 @@ async function callOnce(label, method, path, token, body) {
   return json;
 }
 
-async function newPlayer(index) {
+async function newPlayer(index, track = false) {
   const email = `load-${RUN}-${index}@loadtest.gameverse.test`;
   const session = await call('register', 'POST', '/v1/auth/register', null, {
     email,
@@ -82,15 +87,26 @@ async function newPlayer(index) {
     avatarId: 'avatar-01',
     bio: 'load test',
   });
-  return { token };
+  const player = { token };
+  if (track) {
+    player.start = (await call('wallet', 'GET', '/v1/wallet', token)).balance;
+    tracked.push(player);
+  }
+  return player;
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const uuid = () => crypto.randomUUID();
 
 async function findMatch(a, b) {
-  const room = await call('room.create', 'POST', '/v1/rooms', a.token, { gameId: 'tictactoe' });
-  const view = await call('room.join', 'POST', '/v1/rooms/join', b.token, { code: room.code });
+  const room = await call('room.create', 'POST', '/v1/rooms', a.token, {
+    gameId: 'tictactoe',
+    ...feeBody,
+  });
+  const view = await call('room.join', 'POST', '/v1/rooms/join', b.token, {
+    code: room.code,
+    ...feeBody,
+  });
   return view.match.id; // POST /v1/rooms/join answers { room, match }
 }
 
@@ -139,11 +155,13 @@ async function playLudoTable(players) {
   const room = await call('room.create', 'POST', '/v1/rooms', host.token, {
     gameId: 'ludo',
     players: SEATS,
+    ...feeBody,
   });
   let match = null;
   for (const guest of guests) {
     const joined = await call('room.join', 'POST', '/v1/rooms/join', guest.token, {
       code: room.code,
+      ...feeBody,
     });
     match = joined.match ?? match;
   }
@@ -184,7 +202,7 @@ async function playLudoTable(players) {
 
 async function table(index) {
   const players = await Promise.all(
-    Array.from({ length: SEATS }, (_, i) => newPlayer(index * SEATS + i)),
+    Array.from({ length: SEATS }, (_, i) => newPlayer(index * SEATS + i, true)),
   );
   let finished = 0;
   for (let m = 0; m < MATCHES; m += 1) {
@@ -196,8 +214,8 @@ async function table(index) {
 
 async function pair(index) {
   if (LUDO) return table(index);
-  const a = await newPlayer(index * 2);
-  const b = await newPlayer(index * 2 + 1);
+  const a = await newPlayer(index * 2, true);
+  const b = await newPlayer(index * 2 + 1, true);
   let finished = 0;
   for (let m = 0; m < MATCHES; m += 1) {
     const done = await playMatch(a, b);
@@ -219,6 +237,7 @@ const joined = await Promise.allSettled(
     call('queue.join', 'POST', '/v1/matchmaking/join', p.token, {
       gameId: GAME,
       ...(LUDO ? { players: SEATS } : {}),
+      ...feeBody,
     }),
   ),
 );
@@ -256,10 +275,29 @@ for (const [label, list] of [...latencies].sort()) {
     `  ${label.padEnd(14)} ${pct(sorted, 50).toFixed(0).padStart(5)} / ${pct(sorted, 95).toFixed(0).padStart(5)} / ${pct(sorted, 99).toFixed(0).padStart(5)} / ${sorted[sorted.length - 1].toFixed(0).padStart(5)}   n=${sorted.length}`,
   );
 }
+if (FEE > 0) {
+  // Every fee goes into a pot and every pot is paid out, so the coins of the tracked players must
+  // add up to what they started with once all their matches are over.
+  let start = 0;
+  let end = 0;
+  for (const p of tracked) {
+    start += p.start;
+    end += (await call('wallet', 'GET', '/v1/wallet', p.token)).balance;
+  }
+  console.log(
+    `coins: ${tracked.length} players, fee ${FEE}, start total ${start}, end total ${end}, difference ${end - start}`,
+  );
+  if (end !== start) {
+    console.log('COIN MISMATCH (a difference is expected only if some match did not finish)');
+    errors.set('coin total changed', 1);
+  }
+}
 console.log(`503 busy retries absorbed by the script: ${busyRetries}`);
 if (errors.size) {
   console.log('errors:');
   for (const [key, n] of errors) console.log(`  ${key}: ${n}`);
 }
 for (const r of failedPairs.slice(0, 3)) console.log('failed pair:', r.reason?.message);
-process.exit(failedPairs.length || finished < PAIRS * MATCHES ? 1 : 0);
+process.exit(
+  failedPairs.length || finished < PAIRS * MATCHES || errors.has('coin total changed') ? 1 : 0,
+);

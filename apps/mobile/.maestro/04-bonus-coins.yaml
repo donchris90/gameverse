@@ -1,0 +1,34 @@
+# Registers, checks the bonus-coin balance, claims the daily coins, and checks that a practice match
+# against a labelled bot costs nothing. Written, never run (see README.md).
+appId: com.gameverse.app.dev
+env:
+  PASSWORD: correct-horse-battery-staple
+---
+- clearState
+- launchApp
+- evalScript: ${output.suffix = String(Date.now()).slice(-8)}
+- tapOn: New here? Create an account
+- tapOn: Email
+- inputText: maestro-${output.suffix}@example.com
+- tapOn:
+    text: Password.*
+- inputText: ${PASSWORD}
+- tapOn: Date of birth.*
+- inputText: '1995-01-01'
+- hideKeyboard
+- tapOn: I accept the Terms and Privacy Policy
+- tapOn: Create account
+- tapOn: Username
+- inputText: bc${output.suffix}
+- hideKeyboard
+- tapOn: Continue
+- assertVisible: Play
+# The starter grant shows as a balance, and the banner says the coins are free play coins.
+- assertVisible: .*500.*
+- tapOn: Claim .* daily coins
+- assertVisible: Next daily coins in about .*
+# A bot match is free: no entry line appears.
+- tapOn: easy
+- tapOn: Play easy bot
+- assertVisible: .*Bot.*
+- assertNotVisible: Entry .* bonus coins.*

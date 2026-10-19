@@ -30,25 +30,26 @@ Both stores expect an app with chat and public profiles to offer: filtering of o
 - Product decision: **16+**, enforced by date of birth at sign-up (under-16 refused, tested).
 - Apple: complete the age-rating questionnaire truthfully. Features that raise the rating: unrestricted user-to-user chat, user-generated profiles and voice. Expect the result to be a high teen tier, not 4+ or 9+. **The resulting rating is unverified**; it is computed by Apple from the answers.
 - Google Play: complete the IARC questionnaire (users can interact, user-generated content shared, voice). Set the target audience to 16+ / adults only. **Do not opt in to the Families / "designed for children" programme.**
-- No gambling, no real-money play, no paid entry, no ads in the MVP. State "no" for each.
+- No gambling, no real-money play, no real-money entry, no ads in the MVP. State "no" for each. Since decision #110 matches can cost **bonus coins** (free, not purchasable, not withdrawable, not transferable; see section 9). Answer the gambling and "virtual currency" questions with that in mind and have the lawyer confirm the wording.
 
 ## 4. Privacy labels and Data safety (draft answers for the lawyer)
 
 Collected, linked to the user, not used for tracking, no advertising use:
 
-| Data                                                               | Why                                   | Notes                                                                                                                                                 |
-| ------------------------------------------------------------------ | ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Email address                                                      | account, verification, security email |                                                                                                                                                       |
-| Password                                                           | account                               | Stored only as an Argon2id hash; never shown                                                                                                          |
-| Date of birth                                                      | age gate                              | Stored; scrubbed on deletion                                                                                                                          |
-| User ID, username, avatar, bio                                     | profile, play                         | Username and avatar are public to other players per privacy settings                                                                                  |
-| Chat messages                                                      | deliver conversations, safety         | Visible to the two participants and to moderators when reported                                                                                       |
-| Friends list, blocks                                               | social features, safety               |                                                                                                                                                       |
-| Game activity: matches, results, rating, XP, leaderboard rank      | play                                  | Rank is public per game                                                                                                                               |
-| Device push token                                                  | notifications                         | Expo push service, Apple, Google                                                                                                                      |
-| Approximate technical data: IP address, request ids in server logs | security, debugging                   | Retention period to be decided (privacy draft has a placeholder)                                                                                      |
-| Crash and error diagnostics                                        | fix bugs                              | **Only if Sentry is enabled** (off by default). Scrubbed of emails, tokens and bodies.                                                                |
-| Voice                                                              | live voice chat                       | Not recorded by us. Audio is carried by Agora (a processor). Decide with the lawyer how to answer "audio data": transmitted in real time, not stored. |
+| Data                                                                        | Why                                   | Notes                                                                                                                                                 |
+| --------------------------------------------------------------------------- | ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Email address                                                               | account, verification, security email |                                                                                                                                                       |
+| Password                                                                    | account                               | Stored only as an Argon2id hash; never shown                                                                                                          |
+| Date of birth                                                               | age gate                              | Stored; scrubbed on deletion                                                                                                                          |
+| User ID, username, avatar, bio                                              | profile, play                         | Username and avatar are public to other players per privacy settings                                                                                  |
+| Chat messages                                                               | deliver conversations, safety         | Visible to the two participants and to moderators when reported                                                                                       |
+| Friends list, blocks                                                        | social features, safety               |                                                                                                                                                       |
+| Game activity: matches, results, rating, XP, leaderboard rank               | play                                  | Rank is public per game                                                                                                                               |
+| Bonus-coin balance and ledger (entry fees, pots, daily and level-up grants) | play                                  | Private to the player. Has no money value. Kept for audit; scrubbed with the account                                                                  |
+| Device push token                                                           | notifications                         | Expo push service, Apple, Google                                                                                                                      |
+| Approximate technical data: IP address, request ids in server logs          | security, debugging                   | Retention period to be decided (privacy draft has a placeholder)                                                                                      |
+| Crash and error diagnostics                                                 | fix bugs                              | **Only if Sentry is enabled** (off by default). Scrubbed of emails, tokens and bodies.                                                                |
+| Voice                                                                       | live voice chat                       | Not recorded by us. Audio is carried by Agora (a processor). Decide with the lawyer how to answer "audio data": transmitted in real time, not stored. |
 
 Not collected: location, contacts, photos, health, financial information, browsing history, advertising ID. No third-party advertising or analytics SDKs are in the app (Sentry is the only optional one).
 
@@ -72,6 +73,19 @@ Not collected: location, contacts, photos, health, financial information, browsi
 - Reviewers need a working demo account and a way to see a match: provide two ready accounts and note that Ludo and voice need a second device. Ludo ships **disabled** in the games table until the owner enables it.
 - A reachable backend is required during review; the preview build points at the Render service (`eas.json`). Production URL not set.
 - Store listing needs: privacy policy URL, support URL, marketing URL (optional), screenshots, description that does not claim availability in untested regions.
+
+## 9. Bonus coins and entry fees (added in Phase 8)
+
+What the app does: each player has a balance of free **bonus coins** (a starter grant, a daily check-in and level-up rewards). A match against other people can cost 0, 50, 100, 250 or 500 coins per player; the fees form a pot that the server pays to the winner (4-player Ludo: two thirds to first, one third to second). Bot practice is free. A match that never starts refunds everyone.
+
+What the app does not do: no purchase of coins (no in-app purchase, no ads for coins), no cash-out, no transfer between players, no prizes with real-world value, no coin-selling by admins. The admin can grant coins and can switch paid entry off (`paidEntry`).
+
+Store points to raise with the lawyer before submission (**all unverified; no store has reviewed this app**):
+
+- Google Play real-money gambling policy applies to real-money stakes or prizes. Virtual-currency-only entry with no prize of value should fall outside it, but the questionnaire wording ("users can wager") needs a careful answer.
+- Apple guideline 5.3 (gaming, gambling, lotteries) is about real money; simulated-gambling rules matter for casino-style games. These are skill and chance board games with virtual coins that cannot be bought.
+- If coins are ever sold or cashed out, this whole section changes and the idea must come back to the owner first (CLAUDE.md scope).
+- Terms of service and the privacy draft must say what the coins are: free, no cash value, can be changed or removed. **The drafts have not yet been updated for coins.**
 
 ## 8. Things only the owner can do
 

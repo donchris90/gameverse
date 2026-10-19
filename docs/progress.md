@@ -464,4 +464,12 @@ One full integration run had a single `concurrency-matches` failure with the err
 - Added: `test/ayo-entry.e2e-spec.ts` (3 tests: fees taken and pot shown; the player who stays gets the pot, the leaver gets nothing; both fees returned when the match is left before it starts) and the entry/pot line on the Ayo screen while a match is running. The fee picker and settlement were already game-independent.
 - Verified, real output: turbo gate Tasks: 22 successful, 22 total; integration `Test Files 35 passed, Tests 651 passed`; `npx prettier --check .` clean. Mutation check not run for these three tests because they exercise the shared settlement paths already mutation-checked in 8B and 8D.
 - Not verified: the Ayo screen on a phone. The RRYDA Ayo look (seed animation, party room) is not ported; the visual pass is planned in 8F.
-- Next exact action: slice 8F (catalogue, art, load test, Maestro flows, checkpoint) after the owner approves 8D and 8E.
+- Next exact action: slice 8F (done, see below), then the owner decision in `docs/phase-8-checkpoint.md`.
+
+## Slice 8F: load, flows, store notes, checkpoint (verified where stated; no phone)
+
+- `apps/api/scripts/paid-load.sh` + `--fee` in `load-test.mjs`: real output in `docs/load-test.md` (tic-tac-toe 20 pairs x 2 paid: 40/40 finished, coins 20,000 to 20,000; Ludo 5 tables paid: 5/5, coins 10,000 to 10,000).
+- `apps/mobile/.maestro/04-bonus-coins.yaml` written, never run. Store notes: `docs/store-compliance.md` section 9; terms clause 6 and privacy ledger row added to the drafts (lawyer has not seen them). Taglines updated for single game and AI cover.
+- Checkpoint report: `docs/phase-8-checkpoint.md`. Not done: the RRYDA board/dice/seed art for Ludo and Ayo.
+- Integration suite after 8F: one full run failed `matches-bot ... answers a human move exactly once and then waits for the human`. Likely cause (not reproduced; the test passed 6 file runs and 10 single runs before the fix): the test always played cell 0, but the random opener (a bot) may already hold cell 0. The test now plays the first free cell. This does not loosen the assertions.
+- Another full run failed `security ... conversations: a stranger cannot read, write, mark or mute a private chat` once (not reproduced: 4 clean file runs, then 2 clean full runs: 35 files, 651 tests passed). The failure message was not captured. Flake list for the owner: matches-bot (twice, different tests), lobby race (422), security conversations (once). All pass alone and in repeat full runs.
