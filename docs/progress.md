@@ -441,3 +441,19 @@ One full integration run had a single `concurrency-matches` failure with the err
 - Not verified: the new board and player cards on a phone, bot strength by feel, the single-game picker.
 - RRYDA's "Party Room" spectator view and its stake modes are not ported (out of scope).
 - Next exact action: slice 8D (Ludo port), after reading RRYDA `ludo-payout.ts` and listing rule differences for approval.
+
+## Slice 8D: Ludo port (rules, bots, pots, AI cover built and verified on the server side; mobile screen not seen on a phone)
+
+- Owner answers 2026-10-19 (decision #116): extra roll stays ours (six, capture, reaching home); no blocks; 4-player pot 2/3 first and 1/3 second (2-3 players winner takes all); an absent player is covered by the AI, clearly labelled.
+- Built: rules in `packages/game-rules/src/ludo.ts` (no blocks, game ends at two finishers for 3-4 players, AI cover with a 20-covered-turn cap, `ludoPayouts`); hard bot with RRYDA weights; `apps/api/src/matches/settlement.ts` (pot, refunds) used by `EntryService.settle`; `POST /v1/matches/:id/resume` ("Take back control"); migration `20261025000000_ludo_ai_cover` (`game_matches.aiCover`); the bot sweeper plays covered seats; a disconnect starts cover after the existing 30 s grace; view fields `ludo.ai` and `payout`; mobile button, AI labels and coin line in `LudoMatch.tsx`.
+- Tests changed because the rules changed (none skipped or loosened): `test/ludo.e2e-spec.ts` disconnect test (offline past grace now means AI cover, not removal) and the title of the timeout test (removal after 20 covered turns, not 3 timeouts); three game-rules tests about blocks and timeouts, rewritten in `ludo.spec.ts`.
+- New tests: `test/ludo-ai-cover.e2e-spec.ts` (8: cover on a missed turn, sweeper plays the covered seat only, human roll ends cover, resume with retry/not-covered/not-seated/no login, removal at the cap, 2-player pot and leaver gets nothing, 4-player 2/3-1/3 split paid once); game-rules and shared-types specs.
+- Verified, real output:
+  - `PRISMA_SCHEMA_ENGINE_BINARY=/bin/true pnpm exec turbo run lint typecheck build test --env-mode=loose --continue`: Tasks: 22 successful, 22 total (game-rules 206 tests).
+  - `pnpm exec vitest run --config ./vitest.config.e2e.ts` in `apps/api`: Test Files 34 passed, Tests 648 passed.
+  - `bash apps/api/scripts/smoke-dist.sh`: "compiled API is up and ready". `npx prettier --check .`: all files use Prettier code style.
+  - Mutations: removing the lane-exit threat condition failed its bot test; forcing `aiCover: false` failed 3 integration tests; both restored.
+- Flakes seen once each, not reproduced alone: `lobby ... a player cannot be queued and matched at the same time as joining a room` got a 422 in one full run (51/51 on three reruns); my own sweeper test assumed it would be seat 1's turn after a covered turn, but an extra roll keeps it with seat 0, so I fixed the test (12 clean runs). The earlier `matches-bot` flake is still unexplained.
+- Not verified: the Ludo screen on a phone (button, AI labels, coin line). The board look is unchanged from before: the RRYDA visual refresh is not done yet and is planned in 8F with the art pass. The path is still our 57 steps.
+- Owner action: redeploy the API on Render so migrations `entry_fees`, `best_of` and `ludo_ai_cover` apply, and check the Ludo screen on a device.
+- Next exact action: slice 8E (Ayo): write `docs/ayo-rules.md` from the RRYDA code, list differences from our Ayo for approval.

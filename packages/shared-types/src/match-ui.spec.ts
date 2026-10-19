@@ -65,6 +65,7 @@ function match(over: Partial<MatchView> = {}): MatchView {
     ayo: null,
     entryFee: 0,
     pot: 0,
+    payout: 0,
     deadline: null,
     serverTime: '2026-10-18T12:00:00.000Z',
     endReason: null,

@@ -86,6 +86,17 @@ export class MatchesController {
     return this.matches.roll(user.id, id, body);
   }
 
+  /** Ludo: take your seat back from the AI that was playing it while you were away. */
+  @Post(':id/resume')
+  @HttpCode(HttpStatus.OK)
+  resume(
+    @CurrentUser() user: AuthUser,
+    @idParam() id: string,
+    @Body(new ZodValidationPipe(rollSchema)) body: z.output<typeof rollSchema>,
+  ): Promise<MatchView> {
+    return this.matches.resume(user.id, id, body);
+  }
+
   /** Ludo: move a token by the die that was rolled. */
   @Post(':id/token-moves')
   @HttpCode(HttpStatus.OK)

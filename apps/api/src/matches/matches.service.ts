@@ -413,6 +413,11 @@ export class MatchesService implements OnModuleInit {
     return this.act(userId, matchId, request, { kind: 'roll' });
   }
 
+  /** Ludo: the player takes their seat back from the AI that was covering it. */
+  async resume(userId: string, matchId: string, request: RollRequest): Promise<MatchView> {
+    return this.act(userId, matchId, request, { kind: 'resume' });
+  }
+
   /** Ludo: move one token by the die that was rolled. */
   async moveToken(userId: string, matchId: string, request: TokenMoveRequest): Promise<MatchView> {
     return this.act(userId, matchId, request, { kind: 'token', token: request.token });
@@ -672,15 +677,16 @@ export class MatchesService implements OnModuleInit {
         }
         const overdue = gone
           .filter((entry) => now.getTime() - entry.since.getTime() >= DISCONNECT_GRACE_MS)
-          .sort((a, b) => a.since.getTime() - b.since.getTime() || a.seat - b.seat)[0];
-        if (
-          overdue !== undefined &&
-          (await this.forfeitDisconnected(match.id, overdue.seat, now))
-        ) {
-          forfeited += 1;
-        } else if (changed) {
-          await this.publish(match.id);
+          .sort((a, b) => a.since.getTime() - b.since.getTime() || a.seat - b.seat);
+        // Every overdue seat is dealt with: a game (Ludo) can lose or cover more than one.
+        let acted = false;
+        for (const entry of overdue) {
+          if (await this.forfeitDisconnected(match.id, entry.seat, now)) {
+            forfeited += 1;
+            acted = true;
+          }
         }
+        if (!acted && changed) await this.publish(match.id);
       } catch {
         // one failing match must not stop the others; the next sweep retries
       }
@@ -765,7 +771,11 @@ export class MatchesService implements OnModuleInit {
    */
   async runBotMoves(now = new Date()): Promise<number> {
     const waiting = await this.prisma.gameMatch.findMany({
-      where: { status: 'ACTIVE', players: { some: { userId: null } } },
+      // Matches with a bot, and Ludo matches where the AI is playing for an absent human.
+      where: {
+        status: 'ACTIVE',
+        OR: [{ players: { some: { userId: null } } }, { aiCover: true }],
+      },
       select: { id: true },
       take: SWEEP_BATCH,
     });

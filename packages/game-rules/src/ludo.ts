@@ -1,5 +1,7 @@
 /**
- * Ludo rules, exactly as approved in docs/ludo-rules.md. Pure and deterministic: the dice value is
+ * Ludo rules, as approved in docs/ludo-rules.md and changed by the RRYDA port (decision #116):
+ * no blocks (landing captures every opponent token on the square), a match of 3 or 4 players ends
+ * when two have finished, and an AI covers the seat of a player who is away. Pure and deterministic: the dice value is
  * an input (the server rolls it with a CSPRNG and logs it), nothing here reads a clock or random
  * source, and every function returns a new state instead of changing the old one.
  *
@@ -24,8 +26,11 @@ export const STAR_OFFSET = 8;
 export const SIX = 6;
 export const MAX_CONSECUTIVE_SIXES = 3;
 export const LUDO_TURN_TIMER_MS = 20_000;
-/** A seat that lets this many turns time out in a row is removed from the game. */
-export const LUDO_MAX_CONSECUTIVE_TIMEOUTS = 3;
+/**
+ * A seat the AI has covered for this many turns in a row, without its player acting once, is
+ * removed from the game.
+ */
+export const LUDO_AI_COVER_MAX_TURNS = 20;
 
 /** Which of the four board colours (0..3) each seat plays, by player count. */
 export function coloursFor(players: LudoPlayerCount): readonly number[] {
@@ -69,7 +74,10 @@ export interface LudoState {
   readonly finished: readonly LudoSeat[];
   /** Seats removed from the game (left, disconnected, timed out), in the order they left. */
   readonly removed: readonly LudoSeat[];
+  /** Turns in a row the server has played for each seat because its player was away. */
   readonly consecutiveTimeouts: readonly number[];
+  /** True for a seat whose player is away: the AI plays it until the player acts or takes it back. */
+  readonly ai: readonly boolean[];
   /** Final order, first place first; set when the game is finished. */
   readonly placings: readonly LudoSeat[] | null;
   readonly endReason: LudoEndReason | null;
@@ -84,7 +92,8 @@ export type LudoError =
   | 'INVALID_DIE'
   | 'INVALID_TOKEN'
   | 'ILLEGAL_MOVE'
-  | 'INVALID_SEAT';
+  | 'INVALID_SEAT'
+  | 'NOT_COVERED';
 
 export type LudoEvent =
   | { readonly type: 'ROLLED'; readonly seat: LudoSeat; readonly value: number }
@@ -110,6 +119,8 @@ export type LudoEvent =
       readonly seat: LudoSeat;
       readonly reason: 'forfeit' | 'timeout';
     }
+  | { readonly type: 'AI_COVER_STARTED'; readonly seat: LudoSeat }
+  | { readonly type: 'AI_COVER_ENDED'; readonly seat: LudoSeat }
   | { readonly type: 'EXTRA_ROLL'; readonly seat: LudoSeat }
   | { readonly type: 'TURN'; readonly seat: LudoSeat }
   | { readonly type: 'GAME_OVER'; readonly placings: readonly LudoSeat[] };
@@ -122,7 +133,7 @@ export interface LudoMove {
   readonly token: number;
   readonly from: number;
   readonly to: number;
-  /** The seat of the single opponent token this move captures, if any. */
+  /** The seat whose token(s) on the landing square this move captures, if any. */
   readonly captures: LudoSeat | null;
   readonly entersFromBase: boolean;
   readonly reachesHome: boolean;
@@ -143,6 +154,7 @@ export function createLudo(players: LudoPlayerCount, openingSeat: LudoSeat = 0):
     finished: [],
     removed: [],
     consecutiveTimeouts: Array<number>(players).fill(0),
+    ai: Array<boolean>(players).fill(false),
     placings: null,
     endReason: null,
     rolls: 0,
@@ -204,11 +216,8 @@ export function legalLudoMoves(state: LudoState): LudoMove[] {
     const square = trackSquare(colour, to);
     let captures: LudoSeat | null = null;
     if (square !== null && !isSafeSquare(square)) {
-      const others = occupants(state, square, seat);
-      const bySeat = new Map<LudoSeat, number>();
-      for (const other of others) bySeat.set(other.seat, (bySeat.get(other.seat) ?? 0) + 1);
-      if ([...bySeat.values()].some((count) => count >= 2)) return; // cannot land on a block
-      captures = others[0]?.seat ?? null;
+      // There are no blocks: whatever one opponent has on this square is captured together.
+      captures = occupants(state, square, seat)[0]?.seat ?? null;
     }
     moves.push({
       token,
@@ -243,13 +252,27 @@ function withTimeouts(state: LudoState, seat: LudoSeat, value: number): readonly
   return state.consecutiveTimeouts.map((count, index) => (index === seat ? value : count));
 }
 
-/** Ends the game if at most one seat is still playing; the last one takes the next place. */
+/** Tokens home, then total progress: how far a seat that did not finish got. */
+function progressOf(state: LudoState, seat: LudoSeat): [number, number] {
+  const row = state.tokens[seat] ?? [];
+  return [tokensHome(state, seat), row.reduce((sum, p) => sum + (p + 1), 0)];
+}
+
+/**
+ * Ends the game when at most one seat is still playing, or, with 3 or 4 players, once two seats
+ * have finished. Seats still racing are placed by how far they got; removed seats come last, the
+ * latest leaver ahead.
+ */
 function settle(state: LudoState, events: LudoEvent[]): LudoState {
   const active = activeSeats(state);
-  if (active.length > 1) return state;
-  const survivors = active;
-  // Finished seats first, then the survivor, then removed seats with the latest leaver ahead.
-  const placings = [...state.finished, ...survivors, ...[...state.removed].reverse()];
+  const raceOver = state.players >= 3 && state.finished.length >= 2;
+  if (active.length > 1 && !raceOver) return state;
+  const racing = [...active].sort((a, b) => {
+    const [homeA, stepsA] = progressOf(state, a);
+    const [homeB, stepsB] = progressOf(state, b);
+    return homeB - homeA || stepsB - stepsA || a - b;
+  });
+  const placings = [...state.finished, ...racing, ...[...state.removed].reverse()];
   events.push({ type: 'GAME_OVER', placings });
   return {
     ...state,
@@ -340,7 +363,6 @@ export function applyLudoMove(state: LudoState, seat: LudoSeat, token: number): 
     finished,
     phase: 'roll',
     roll: null,
-    consecutiveTimeouts: withTimeouts(state, seat, 0),
   };
   const seatDone = finished.includes(seat);
   if (seatDone || activeSeats(next).length <= 1) {
@@ -389,16 +411,69 @@ export function removeLudoSeat(
   return { ok: true, state: next, events };
 }
 
-/** A turn ran out of time: play the fallback move (or pass). Three timeouts in a row remove the seat. */
-export function applyLudoTimeout(state: LudoState, rollValue: number): LudoResult {
+function withAi(state: LudoState, seat: LudoSeat, value: boolean): LudoState {
+  return { ...state, ai: state.ai.map((flag, index) => (index === seat ? value : flag)) };
+}
+
+/** The AI starts covering a seat whose player dropped off. Does nothing to a seat already covered. */
+export function startLudoAiCover(state: LudoState, seat: LudoSeat): LudoResult {
+  if (state.phase === 'finished') return fail('GAME_FINISHED');
+  if (seat >= state.players || !isActiveSeat(state, seat)) return fail('INVALID_SEAT');
+  if (isAiCovered(state, seat)) return fail('NOT_COVERED');
+  return {
+    ok: true,
+    state: withAi(state, seat, true),
+    events: [{ type: 'AI_COVER_STARTED', seat }],
+  };
+}
+
+/** Is the AI playing this seat for its (away) player? */
+export function isAiCovered(state: LudoState, seat: LudoSeat): boolean {
+  return state.ai[seat] === true;
+}
+
+/**
+ * The player acted, or asked for the seat back: the AI stops and the count of covered turns
+ * restarts. Does nothing (and returns no events) for a seat the AI is not covering.
+ */
+export function takeBackLudoSeat(
+  state: LudoState,
+  seat: LudoSeat,
+): { state: LudoState; events: LudoEvent[] } {
+  if (!isAiCovered(state, seat) && (state.consecutiveTimeouts[seat] ?? 0) === 0) {
+    return { state, events: [] };
+  }
+  const events: LudoEvent[] = isAiCovered(state, seat) ? [{ type: 'AI_COVER_ENDED', seat }] : [];
+  return { state: withAi(withTimeouts2(state, seat, 0), seat, false), events };
+}
+
+function withTimeouts2(state: LudoState, seat: LudoSeat, value: number): LudoState {
+  return { ...state, consecutiveTimeouts: withTimeouts(state, seat, value) };
+}
+
+/** Which token the AI moves; null means no choice (it falls back to the fixed default move). */
+export type LudoTokenChooser = (state: LudoState) => number | null;
+
+/**
+ * A turn ran out of time. The AI starts covering that seat and plays this whole turn. After
+ * LUDO_AI_COVER_MAX_TURNS covered turns in a row the seat is removed instead.
+ */
+export function applyLudoTimeout(
+  state: LudoState,
+  rollValue: number,
+  choose: LudoTokenChooser = defaultLudoMove,
+): LudoResult {
   if (state.phase === 'finished') return fail('GAME_FINISHED');
   const seat = state.toMove;
-  const strikes = (state.consecutiveTimeouts[seat] ?? 0) + 1;
-  const struck: LudoState = { ...state, consecutiveTimeouts: withTimeouts(state, seat, strikes) };
-  if (strikes >= LUDO_MAX_CONSECUTIVE_TIMEOUTS) return removeLudoSeat(struck, seat, 'timeout');
+  const turns = (state.consecutiveTimeouts[seat] ?? 0) + 1;
+  if (turns > LUDO_AI_COVER_MAX_TURNS) return removeLudoSeat(state, seat, 'timeout');
 
   const events: LudoEvent[] = [];
-  let current = struck;
+  let current = withTimeouts2(state, seat, turns);
+  if (!isAiCovered(current, seat)) {
+    current = withAi(current, seat, true);
+    events.push({ type: 'AI_COVER_STARTED', seat });
+  }
   if (current.phase === 'roll') {
     const rolled = applyLudoRoll(current, seat, rollValue);
     if (!rolled.ok) return rolled;
@@ -406,22 +481,63 @@ export function applyLudoTimeout(state: LudoState, rollValue: number): LudoResul
     current = rolled.state;
     // The rolled die may already have ended the turn (no move, third six).
     if (current.phase !== 'move' || current.toMove !== seat) {
-      return { ok: true, state: keepStrikes(current, seat, strikes), events };
+      return { ok: true, state: current, events };
     }
   }
-  const token = defaultLudoMove(current);
+  const token = choose(current) ?? defaultLudoMove(current);
   if (token === null) {
-    return { ok: true, state: keepStrikes(passTurn(current, events), seat, strikes), events };
+    return { ok: true, state: passTurn(current, events), events };
   }
   const moved = applyLudoMove(current, seat, token);
   if (!moved.ok) return moved;
   events.push(...moved.events);
-  // A timeout is not a deliberate move: the strike stays.
-  return { ok: true, state: keepStrikes(moved.state, seat, strikes), events };
+  return { ok: true, state: moved.state, events };
 }
 
-function keepStrikes(state: LudoState, seat: LudoSeat, strikes: number): LudoState {
-  return { ...state, consecutiveTimeouts: withTimeouts(state, seat, strikes) };
+/**
+ * One step (a roll, or a move) for a seat the AI is covering. The first step of a turn counts
+ * toward LUDO_AI_COVER_MAX_TURNS. Goes through the same validators as a human step.
+ */
+export function applyLudoCoverStep(
+  state: LudoState,
+  rollValue: number,
+  choose: LudoTokenChooser,
+): LudoResult {
+  if (state.phase === 'finished') return fail('GAME_FINISHED');
+  const seat = state.toMove;
+  if (!isAiCovered(state, seat)) return fail('NOT_COVERED');
+  if (state.phase === 'roll') {
+    const turns = (state.consecutiveTimeouts[seat] ?? 0) + 1;
+    if (turns > LUDO_AI_COVER_MAX_TURNS) return removeLudoSeat(state, seat, 'timeout');
+    return applyLudoRoll(withTimeouts2(state, seat, turns), seat, rollValue);
+  }
+  const token = choose(state) ?? defaultLudoMove(state);
+  if (token === null) return fail('ILLEGAL_MOVE');
+  return applyLudoMove(state, seat, token);
+}
+
+/**
+ * Who receives what from the pot: the first player still in the game takes it all, except that
+ * with 4 players two-thirds goes to first and the rest to second. A seat that left gets nothing.
+ */
+export function ludoPayouts(
+  pot: number,
+  players: LudoPlayerCount,
+  placings: readonly LudoSeat[],
+  removed: readonly LudoSeat[],
+): { seat: LudoSeat; amount: number }[] {
+  const eligible = placings.filter((seat) => !removed.includes(seat));
+  const first = eligible[0];
+  if (first === undefined || pot <= 0) return [];
+  const second = eligible[1];
+  if (players === 4 && second !== undefined) {
+    const top = Math.floor((pot * 2) / 3);
+    return [
+      { seat: first, amount: top },
+      { seat: second, amount: pot - top },
+    ];
+  }
+  return [{ seat: first, amount: pot }];
 }
 
 /** Number of tokens a seat has home. */

@@ -17,6 +17,7 @@ import {
   ordinal,
   placingRows,
   roomSummary,
+  iAmCovered,
   seatSummaries,
   shownDie,
   tokenDescription,
@@ -55,6 +56,7 @@ function ludo(over: Partial<LudoView> = {}): LudoView {
     moves: [],
     finished: [],
     removed: [],
+    ai: [false, false, false, false],
     placings: null,
     endReason: null,
     rolls: 0,
@@ -78,6 +80,7 @@ function match(over: Partial<MatchView> = {}, game: Partial<LudoView> = {}): Mat
     ayo: null,
     entryFee: 0,
     pot: 0,
+    payout: 0,
     deadline: null,
     serverTime: '2026-10-18T12:00:00.000Z',
     endReason: null,
@@ -515,5 +518,46 @@ describe('leaveLabel', () => {
     expect(leaveLabel(match({ players: [player(0, { out: true }), player(1), player(2)] }))).toBe(
       'Leave',
     );
+  });
+});
+
+describe('AI cover', () => {
+  it('tells me the AI is playing my seat, and offers the seat back', () => {
+    const covered = match({}, { ai: [true, false, false, false], toMove: 1 });
+    expect(iAmCovered(covered)).toBe(true);
+    expect(ludoStatus(covered, 10)).toMatchObject({
+      headline: 'The AI is playing for you',
+      tone: 'warn',
+    });
+    expect(iAmCovered(match({}, { ai: [false, false, false, false] }))).toBe(false);
+    expect(iAmCovered(match({ status: 'COMPLETED' }, { ai: [true, false, false, false] }))).toBe(
+      false,
+    );
+  });
+
+  it('labels the AI when it plays for someone else', () => {
+    const other = match({}, { ai: [false, true, false, false], toMove: 1 });
+    expect(ludoStatus(other, 10)).toMatchObject({ headline: 'AI is playing for Bayo' });
+    expect(iAmCovered(other)).toBe(false);
+  });
+
+  it('puts the start and end of cover in the ticker', () => {
+    const texts = ludoEventTexts(
+      match(
+        {},
+        {
+          lastEvents: [
+            { type: 'AI_COVER_STARTED', seat: 0 },
+            { type: 'AI_COVER_STARTED', seat: 1 },
+            { type: 'AI_COVER_ENDED', seat: 1 },
+          ],
+        },
+      ),
+    );
+    expect(texts).toEqual([
+      'You were away: the AI is playing for you',
+      'Bayo is away: the AI is playing for them',
+      'Bayo is playing again',
+    ]);
   });
 });

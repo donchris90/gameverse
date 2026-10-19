@@ -42,6 +42,14 @@ export function iAmOut(view: MatchView): boolean {
   return playerAt(view, view.mySeat)?.out === true;
 }
 
+/** True while the AI is playing my seat because I was away. */
+export function iAmCovered(view: MatchView): boolean {
+  const ludo = ludoOf(view);
+  return (
+    view.status === 'ACTIVE' && ludo !== null && ludo.ai[view.mySeat] === true && !iAmOut(view)
+  );
+}
+
 /** True when it is my turn to roll. */
 export function ludoCanRoll(view: MatchView): boolean {
   const ludo = ludoOf(view);
@@ -178,6 +186,13 @@ export function ludoStatus(view: MatchView, turnSecondsLeft: number | null): Sta
       const timer = turnSecondsLeft === null ? '' : ` · ${String(turnSecondsLeft)}s`;
       const seat = ludo.toMove;
       if (seat === null) return { headline: 'Finishing…', detail: null, tone: 'neutral' };
+      if (iAmCovered(view)) {
+        return {
+          headline: 'The AI is playing for you',
+          detail: 'You were away. Tap Take back control to play yourself again',
+          tone: 'warn',
+        };
+      }
       if (seat === view.mySeat) {
         return ludo.phase === 'roll'
           ? { headline: `Your turn: roll the die${timer}`, detail: sixesNote(ludo), tone: 'good' }
@@ -189,6 +204,13 @@ export function ludoStatus(view: MatchView, turnSecondsLeft: number | null): Sta
       }
       const name = ludoName(view, seat);
       const them = playerAt(view, seat);
+      if (them && them.bot === null && ludo.ai[seat] === true) {
+        return {
+          headline: `AI is playing for ${name}`,
+          detail: `${name} is away. They can take control back at any time`,
+          tone: 'neutral',
+        };
+      }
       if (them && them.bot === null && !them.connected) {
         return {
           headline: `Waiting for ${name}`,
@@ -291,6 +313,12 @@ function eventText(view: MatchView, event: LudoEventView): string | null {
       return `${who} finished ${ordinal(event.place ?? 0)}`;
     case 'SEAT_REMOVED':
       return `${who} ${verb('are', 'is')} out of the game`;
+    case 'AI_COVER_STARTED':
+      return who === 'You'
+        ? 'You were away: the AI is playing for you'
+        : `${who} is away: the AI is playing for them`;
+    case 'AI_COVER_ENDED':
+      return `${who} ${verb('are', 'is')} playing again`;
     default:
       return null;
   }

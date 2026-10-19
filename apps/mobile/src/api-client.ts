@@ -126,6 +126,11 @@ export const games = {
     request<MatchView>('POST', matchPath(id, 'roll'), {
       body: { clientActionId, expectedVersion },
     }),
+  /** Ludo: take my seat back from the AI that was playing for me. */
+  resume: (id: string, clientActionId: string, expectedVersion: number) =>
+    request<MatchView>('POST', matchPath(id, 'resume'), {
+      body: { clientActionId, expectedVersion },
+    }),
   /** Ludo: move one of my tokens by the die I rolled. */
   moveToken: (id: string, token: number, clientActionId: string, expectedVersion: number) =>
     request<MatchView>('POST', matchPath(id, 'token-moves'), {

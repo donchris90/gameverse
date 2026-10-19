@@ -3,6 +3,11 @@ import { describe, expect, it } from 'vitest';
 import {
   HOME_POSITION,
   IN_BASE,
+  LUDO_AI_COVER_MAX_TURNS,
+  applyLudoCoverStep,
+  isAiCovered,
+  ludoPayouts,
+  takeBackLudoSeat,
   applyLudoMove,
   applyLudoRoll,
   applyLudoTimeout,
@@ -270,30 +275,35 @@ describe('capturing, safe squares and blocks', () => {
     expect(moved.state.tokens[0]?.[0]).toBe(0);
   });
 
-  it('cannot land on an opponent block, but can pass over it', () => {
-    // block of two seat-1 tokens on square 14 (p 40); seat 0 token at p=11
-    const tokens = withSeat(withSeat(allBase(2), 0, [11, 10, IN_BASE, IN_BASE]), 1, [
+  it('has no blocks: landing on two opponent tokens captures both', () => {
+    // two seat-1 tokens share square 14 (their p 40); seat 0 token at p=11 lands there with a 3
+    const tokens = withSeat(withSeat(allBase(2), 0, [11, IN_BASE, IN_BASE, IN_BASE]), 1, [
       40,
       40,
       IN_BASE,
       IN_BASE,
     ]);
-    const landing = rolling(stateWith(2, tokens), 0, 3).state; // 11 -> 14 is blocked; 10 -> 13 ok
-    expect(legalLudoMoves(landing).map((m) => m.token)).toEqual([1]);
-    const passing = rolling(stateWith(2, tokens), 0, 4).state; // 11 -> 15 passes over the block
-    // token 0 passes over the block to 15; token 1 (10 + 4) would land on it, so it is refused
-    expect(legalLudoMoves(passing).map((m) => m.token)).toEqual([0]);
+    const rolled = rolling(stateWith(2, tokens), 0, 3).state;
+    expect(legalLudoMoves(rolled).map((m) => [m.token, m.captures])).toEqual([[0, 1]]);
+    const moved = ok(applyLudoMove(rolled, 0, 0));
+    expect(moved.state.tokens[1]).toEqual([IN_BASE, IN_BASE, IN_BASE, IN_BASE]);
+    expect(moved.state.tokens[0]?.[0]).toBe(14);
+    expect(moved.events.map((e) => e.type)).toContain('CAPTURED');
+    expect(checkLudoInvariants(moved.state)).toEqual([]);
   });
 
-  it('a block cannot be captured by any roll, and two different tokens are not a block', () => {
-    const block = withSeat(withSeat(allBase(2), 0, [11, IN_BASE, IN_BASE, IN_BASE]), 1, [
-      40,
-      40,
+  it('a pair on a safe square is still safe: nothing is captured there', () => {
+    // square 8 is a star; seat 1 has two tokens on it (their p 34 -> square (13+34)%52=47? use own p)
+    const tokens = withSeat(withSeat(allBase(2), 0, [5, IN_BASE, IN_BASE, IN_BASE]), 1, [
+      // seat 1 uses colour 2 (start 26): square 8 is at their p = (8 - 26 + 52) % 52 = 34
+      34,
+      34,
       IN_BASE,
       IN_BASE,
     ]);
-    const blocked = rolling(stateWith(2, block), 0, 3);
-    expect(blocked.events.map((e) => e.type)).toEqual(['ROLLED', 'NO_MOVE', 'TURN']);
+    const rolled = rolling(stateWith(2, tokens), 0, 3).state;
+    const move = legalLudoMoves(rolled).find((m) => m.token === 0);
+    expect(move?.captures).toBeNull();
   });
 
   it('own tokens may share a square (forming a block) and never capture each other', () => {
@@ -422,15 +432,52 @@ describe('timeouts', () => {
     expect(result.state.consecutiveTimeouts[0]).toBe(1);
   });
 
-  it('three timeouts in a row remove the seat; a deliberate move clears the count', () => {
+  it('the first missed turn starts AI cover, which a deliberate move ends', () => {
+    const state = stateWith(3, withSeat(allBase(3), 0, [10, IN_BASE, IN_BASE, IN_BASE]));
+    const covered = ok(applyLudoTimeout(state, 3));
+    expect(covered.state.ai).toEqual([true, false, false]);
+    expect(covered.events.map((e) => e.type)).toContain('AI_COVER_STARTED');
+    expect(isAiCovered(covered.state, 0)).toBe(true);
+
+    const back = takeBackLudoSeat(covered.state, 0);
+    expect(back.state.ai).toEqual([false, false, false]);
+    expect(back.state.consecutiveTimeouts[0]).toBe(0);
+    expect(back.events).toEqual([{ type: 'AI_COVER_ENDED', seat: 0 }]);
+    // Nothing to give back for a seat the AI never covered.
+    expect(takeBackLudoSeat(createLudo(2), 0)).toEqual({ state: createLudo(2), events: [] });
+  });
+
+  it('a covered seat plays on step by step, and a human move never clears the cover by itself', () => {
+    let state = stateWith(2, withSeat(allBase(2), 0, [10, IN_BASE, IN_BASE, IN_BASE]));
+    state = ok(applyLudoTimeout(state, 3)).state; // seat 0 is covered; its turn is played
+    // Seat 1 plays one turn (a roll with no move), then it is seat 0's turn again.
+    state = ok(applyLudoRoll(state, state.toMove, 2)).state;
+    expect(state.toMove).toBe(0);
+    expect(isAiCovered(state, 0)).toBe(true);
+    const roll = ok(applyLudoCoverStep(state, 4, () => 0));
+    expect(roll.state.phase).toBe('move');
+    expect(roll.state.consecutiveTimeouts[0]).toBe(2);
+    const move = ok(applyLudoCoverStep(roll.state, 0, () => 0));
+    expect(move.events.map((e) => e.type)).toContain('MOVED');
+    expect(isAiCovered(move.state, 0)).toBe(true);
+    expect(applyLudoCoverStep(createLudo(2), 3, () => 0)).toEqual({
+      ok: false,
+      error: 'NOT_COVERED',
+    });
+  });
+
+  it('after the limit of covered turns in a row the seat is removed', () => {
     let state = stateWith(3, withSeat(allBase(3), 0, [10, IN_BASE, IN_BASE, IN_BASE]));
-    state = { ...state, consecutiveTimeouts: [2, 0, 0] };
-    const removed = ok(applyLudoTimeout(state, 3));
+    state = {
+      ...state,
+      ai: [true, false, false],
+      consecutiveTimeouts: [LUDO_AI_COVER_MAX_TURNS, 0, 0],
+    };
+    const removed = ok(applyLudoCoverStep(state, 3, () => 0));
     expect(removed.state.removed).toEqual([0]);
     expect(removed.state.toMove).toBe(1);
-
-    const reset = ok(applyLudoMove(rolling(state, 0, 3).state, 0, 0));
-    expect(reset.state.consecutiveTimeouts[0]).toBe(0);
+    const viaTimeout = ok(applyLudoTimeout(state, 3));
+    expect(viaTimeout.state.removed).toEqual([0]);
   });
 
   it('default move prefers the token closest to home, then the lowest index', () => {
@@ -650,5 +697,109 @@ describe('property tests', () => {
       }),
       { numRuns: 100 },
     );
+  });
+});
+
+describe('when the match ends, and who gets the pot', () => {
+  const home = [HOME_POSITION, HOME_POSITION, HOME_POSITION, HOME_POSITION];
+  /** Seat `seat` has three tokens home and one at 56, so a 1 finishes it. */
+  const nearlyDone = (tokens: Tokens, seat: number): Tokens =>
+    withSeat(tokens, seat, [HOME_POSITION, HOME_POSITION, HOME_POSITION, 56]);
+
+  it('two players: the first to finish ends it and wins', () => {
+    const tokens = nearlyDone(allBase(2), 0);
+    const done = ok(applyLudoMove(rolling(stateWith(2, tokens), 0, 1).state, 0, 3)).state;
+    expect(done.phase).toBe('finished');
+    expect(done.placings).toEqual([0, 1]);
+  });
+
+  it('four players: it goes on after the first finisher and ends at the second', () => {
+    let tokens = nearlyDone(allBase(4), 0);
+    tokens = nearlyDone(tokens, 2);
+    tokens = withSeat(tokens, 1, [30, IN_BASE, IN_BASE, IN_BASE]);
+    let state = ok(applyLudoMove(rolling(stateWith(4, tokens), 0, 1).state, 0, 3)).state;
+    expect(state.phase).toBe('roll');
+    expect(state.finished).toEqual([0]);
+    state = { ...state, toMove: 2 };
+    state = ok(applyLudoMove(rolling(state, 2, 1).state, 2, 3)).state;
+    expect(state.phase).toBe('finished');
+    // 1st and 2nd finished; the rest placed by progress: seat 1 has a token out, seat 3 has none.
+    expect(state.placings).toEqual([0, 2, 1, 3]);
+    expect(checkLudoInvariants(state)).toEqual([]);
+  });
+
+  it('three players behave the same: the match ends when two have finished', () => {
+    let tokens = nearlyDone(allBase(3), 0);
+    tokens = nearlyDone(tokens, 1);
+    let state = ok(applyLudoMove(rolling(stateWith(3, tokens), 0, 1).state, 0, 3)).state;
+    expect(state.phase).toBe('roll');
+    state = { ...state, toMove: 1 };
+    state = ok(applyLudoMove(rolling(state, 1, 1).state, 1, 3)).state;
+    expect(state.phase).toBe('finished');
+    expect(state.placings).toEqual([0, 1, 2]);
+  });
+
+  it('places seats that did not finish by tokens home, then by distance travelled', () => {
+    let tokens = nearlyDone(allBase(4), 0);
+    tokens = nearlyDone(tokens, 1);
+    tokens = withSeat(tokens, 2, [HOME_POSITION, IN_BASE, IN_BASE, IN_BASE]);
+    tokens = withSeat(tokens, 3, [20, 20, 20, IN_BASE]);
+    let state = ok(applyLudoMove(rolling(stateWith(4, tokens), 0, 1).state, 0, 3)).state;
+    state = { ...state, toMove: 1 };
+    state = ok(applyLudoMove(rolling(state, 1, 1).state, 1, 3)).state;
+    expect(state.placings).toEqual([0, 1, 2, 3]); // one token home beats three far from home
+  });
+
+  it('pays the whole pot to one winner, or two thirds and one third with four players', () => {
+    expect(ludoPayouts(200, 2, [1, 0], [])).toEqual([{ seat: 1, amount: 200 }]);
+    expect(ludoPayouts(300, 3, [2, 0, 1], [])).toEqual([{ seat: 2, amount: 300 }]);
+    expect(ludoPayouts(400, 4, [3, 1, 0, 2], [])).toEqual([
+      { seat: 3, amount: 266 },
+      { seat: 1, amount: 134 },
+    ]);
+    expect(ludoPayouts(0, 4, [0, 1, 2, 3], [])).toEqual([]);
+  });
+
+  it('a player who left is never paid, and the next player moves up', () => {
+    // seat 0 finished first but another seat left in 4p: removed seats are skipped
+    expect(ludoPayouts(400, 4, [1, 0, 2, 3], [0])).toEqual([
+      { seat: 1, amount: 266 },
+      { seat: 2, amount: 134 },
+    ]);
+    expect(ludoPayouts(200, 2, [1, 0], [0])).toEqual([{ seat: 1, amount: 200 }]);
+    expect(ludoPayouts(200, 2, [0, 1], [0, 1])).toEqual([]);
+  });
+
+  it('keeps every invariant over random games, including AI cover and the new end rule', () => {
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 2, max: 4 }),
+        fc.array(fc.integer({ min: 1, max: 6 }), { minLength: 200, maxLength: 800 }),
+        fc.array(fc.nat(), { minLength: 200, maxLength: 800 }),
+        (count, dice, picks) => {
+          let state = createLudo(count as LudoPlayerCount);
+          for (let i = 0; i < dice.length && state.phase !== 'finished'; i += 1) {
+            const die = dice[i] ?? 1;
+            const result =
+              i % 17 === 0
+                ? applyLudoTimeout(state, die)
+                : state.phase === 'roll'
+                  ? applyLudoRoll(state, state.toMove, die)
+                  : applyLudoMove(
+                      state,
+                      state.toMove,
+                      legalLudoMoves(state)[(picks[i] ?? 0) % legalLudoMoves(state).length]
+                        ?.token ?? 0,
+                    );
+            if (!result.ok) return false;
+            state = result.state;
+            if (checkLudoInvariants(state).length > 0) return false;
+          }
+          return true;
+        },
+      ),
+      { numRuns: 200 },
+    );
+    void home;
   });
 });

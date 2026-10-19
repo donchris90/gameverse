@@ -1,6 +1,7 @@
 import { ludoColors, theme } from '@gameverse/design-system';
 import {
   displayName,
+  iAmCovered,
   iAmOut,
   leaveLabel,
   ludoCanRoll,
@@ -63,6 +64,7 @@ export function LudoMatch({
   const { reduced } = useReduceMotion();
   const pendingRoll = useRef<{ version: number; id: string } | null>(null);
   const pendingMove = useRef<{ token: number; version: number; id: string } | null>(null);
+  const pendingResume = useRef<{ version: number; id: string } | null>(null);
 
   const ludo = match.ludo;
   const boardWidth = Math.min(width - s.lg * 2, 460);
@@ -112,6 +114,16 @@ export function LudoMatch({
     pendingMove.current = attempt;
     tap(Haptics.ImpactFeedbackStyle.Light);
     void send(() => games.moveToken(match.id, token, attempt.id, attempt.version));
+  };
+
+  const onResume = () => {
+    const previous = pendingResume.current;
+    const attempt =
+      previous && previous.version === match.version
+        ? previous
+        : { version: match.version, id: Crypto.randomUUID() };
+    pendingResume.current = attempt;
+    void send(() => games.resume(match.id, attempt.id, attempt.version));
   };
 
   const openChat = (userId: string) =>
@@ -192,9 +204,11 @@ export function LudoMatch({
                   ? 'out'
                   : seat.state === 'finished' && seat.place !== null
                     ? `finished ${String(seat.place)}`
-                    : !seat.connected
-                      ? 'offline'
-                      : `${String(seat.home)}/4 home`}
+                    : ludo.ai[seat.seat]
+                      ? `AI playing · ${String(seat.home)}/4 home`
+                      : !seat.connected
+                        ? 'offline'
+                        : `${String(seat.home)}/4 home`}
               </Text>
             </View>
           </View>
@@ -205,6 +219,12 @@ export function LudoMatch({
         <Text style={[styles.headline, { color: TONE_COLOR[status.tone] }]}>{status.headline}</Text>
         {status.detail ? <Body muted>{status.detail}</Body> : null}
       </View>
+
+      {coinLine && match.status !== 'COMPLETED' ? <Body muted>{coinLine}</Body> : null}
+
+      {iAmCovered(match) && match.status === 'ACTIVE' ? (
+        <Button label="Take back control" busy={act.busy} onPress={onResume} />
+      ) : null}
 
       <View style={styles.boardWrap}>
         <LudoBoard

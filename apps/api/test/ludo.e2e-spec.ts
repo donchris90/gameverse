@@ -272,7 +272,7 @@ describe('ludo matches', () => {
   });
 
   describe('timers', () => {
-    it('plays for a player who runs out of time, then removes them after three timeouts in a row', async () => {
+    it('plays for a player who runs out of time, then removes them after twenty covered turns in a row', async () => {
       const { users, id } = await startHumans(3);
       const first = await get(users[0] as SocialUser, id);
       expect(first.ludo?.toMove).toBe(0);
@@ -385,7 +385,7 @@ describe('ludo matches', () => {
   });
 
   describe('disconnects', () => {
-    it('removes a seat that stays offline past the grace period and carries on', async () => {
+    it('hands a seat that stays offline past the grace period to the AI instead of removing it', async () => {
       const { users, id } = await startHumans(3);
       // No socket is connected in tests, so every human is offline once the grace passes.
       await t.prisma.gameMatchPlayer.updateMany({
@@ -394,7 +394,12 @@ describe('ludo matches', () => {
       });
       await service().runConnectionChecks(tick(10 * 60_000));
       const view = await get(users[0] as SocialUser, id);
-      expect(view.ludo?.removed.length ?? 0).toBeGreaterThan(0);
+      expect(view.status).toBe('ACTIVE');
+      expect(view.ludo?.removed ?? []).toEqual([]);
+      expect(view.ludo?.ai).toEqual([true, true, true]);
+      expect(await t.prisma.gameMatch.findUnique({ where: { id } })).toMatchObject({
+        aiCover: true,
+      });
     });
   });
 

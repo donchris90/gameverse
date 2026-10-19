@@ -114,6 +114,8 @@ export interface LudoView {
   moves: LudoMoveView[];
   finished: PlayerSeat[];
   removed: PlayerSeat[];
+  /** True for each seat the AI is playing because its player is away. */
+  ai: boolean[];
   /** Final order, first place first, once the game is over. */
   placings: PlayerSeat[] | null;
   endReason: 'completed' | 'forfeit' | null;
@@ -207,6 +209,8 @@ export interface MatchView {
   entryFee: number;
   /** Coins the winner takes: the entry fees of everyone in the match. 0 for a free match. */
   pot: number;
+  /** Bonus coins credited to the viewer when the match ended (pot share or refund); 0 before. */
+  payout: number;
   deadline: { kind: MatchDeadlineKind; at: string } | null;
   serverTime: string;
   /** Why the match stopped early or finished: score, forfeit, timeout, left, expired. */

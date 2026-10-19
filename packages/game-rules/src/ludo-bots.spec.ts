@@ -210,4 +210,47 @@ describe('ludo bots', () => {
     expect(chooseLudoMove(state, 'medium', () => 0)).toBe(0);
     expect(chooseLudoMove(state, 'medium', () => 0.99)).toBe(3);
   });
+
+  it('hard does not fear an opponent token that is about to turn into its home lane', () => {
+    // The opponent token (p 51) stands on square 25, its last ring square. Landing on square 27
+    // (A: 23 + 4) is two squares ahead of it, but it can only go into its own lane, never to 27.
+    const state = rolled(
+      [
+        [23, 2, IN_BASE, IN_BASE],
+        [51, IN_BASE, IN_BASE, IN_BASE],
+      ],
+      4,
+    );
+    expect(chooseLudoMove(state, 'hard', () => 0)).toBe(0);
+  });
+
+  it('hard finishes a token before anything else', () => {
+    const state = rolled(
+      [
+        [HOME_POSITION - 3, 10, IN_BASE, IN_BASE],
+        [IN_BASE, IN_BASE, IN_BASE, IN_BASE],
+      ],
+      3,
+    );
+    expect(chooseLudoMove(state, 'hard', () => 0)).toBe(0);
+  });
+
+  it('hard brings the first token out of the base rather than moving a lone one on', () => {
+    const state = rolled(
+      [
+        [IN_BASE, IN_BASE, IN_BASE, IN_BASE],
+        [IN_BASE, IN_BASE, IN_BASE, IN_BASE],
+      ],
+      6,
+    );
+    expect(legalLudoMoves(state).every((move) => move.entersFromBase)).toBe(true);
+    const withOne = rolled(
+      [
+        [5, IN_BASE, IN_BASE, IN_BASE],
+        [IN_BASE, IN_BASE, IN_BASE, IN_BASE],
+      ],
+      6,
+    );
+    expect(chooseLudoMove(withOne, 'hard', () => 0)).not.toBe(0);
+  });
 });

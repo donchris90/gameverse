@@ -1,5 +1,8 @@
 import type { BotLevel, Rng } from './bots.js';
 import {
+  HOME_POSITION,
+  IN_BASE,
+  LAST_TRACK_STEP,
   TRACK_LENGTH,
   isSafeSquare,
   legalLudoMoves,
@@ -33,7 +36,8 @@ function threatsTo(state: LudoState, seat: LudoSeat, square: number): number {
       const at = trackSquare(colour, p);
       if (at === null) continue;
       const distance = (square - at + TRACK_LENGTH) % TRACK_LENGTH;
-      if (distance >= 1 && distance <= 6) threats += 1;
+      // An opponent token that would leave the ring for its home lane first cannot land here.
+      if (distance >= 1 && distance <= 6 && p + distance <= LAST_TRACK_STEP) threats += 1;
     }
   }
   return threats;
@@ -50,18 +54,62 @@ function baseScore(move: LudoMove, colour: number): number {
   return score;
 }
 
-export function scoreLudoMove(state: LudoState, move: LudoMove, level: BotLevel): number {
+/** Progress of the furthest opponent token this move would capture (0 when it captures nothing). */
+function capturedProgress(state: LudoState, seat: LudoSeat, move: LudoMove): number {
+  if (move.captures === null) return 0;
+  const colour = state.colours[seat] ?? 0;
+  const square = trackSquare(colour, move.to);
+  if (square === null) return 0;
+  const victimColour = state.colours[move.captures] ?? 0;
+  let best = 0;
+  for (const p of state.tokens[move.captures] ?? []) {
+    if (trackSquare(victimColour, p) === square) best = Math.max(best, p + 1);
+  }
+  return best;
+}
+
+/**
+ * HARD scoring, ported from the RRYDA Ludo AI: finish a token, capture (the further along the
+ * victim the better), bring tokens out, step into the home lane or onto a safe square, run from
+ * danger, and avoid ending where opponents can hit. Weights are RRYDA's.
+ */
+function hardScore(state: LudoState, move: LudoMove): number {
   const seat = state.toMove;
   const colour = state.colours[seat] ?? 0;
-  let score = baseScore(move, colour);
-  if (level !== 'hard') return score;
+  const row = state.tokens[seat] ?? [];
+  const outCount = row.filter((p) => p !== IN_BASE && p !== HOME_POSITION).length;
+  const { from, to } = move;
+  let score = to * 1.5;
+  if (move.reachesHome) score += 1000;
+  const victim = capturedProgress(state, seat, move);
+  if (victim > 0) score += 600 + victim * 4;
+  if (move.entersFromBase) score += outCount === 0 ? 400 : outCount === 1 ? 260 : 150;
+  if (to >= LAST_TRACK_STEP + 1 && from <= LAST_TRACK_STEP && !move.reachesHome) score += 180;
+  const landing = trackSquare(colour, to);
+  if (landing !== null && isSafeSquare(landing)) score += 90;
 
-  const destination = trackSquare(colour, move.to);
-  if (destination !== null) score -= 60 * threatsTo(state, seat, destination);
-  // Moving a token that is currently in danger is worth something.
-  const origin = trackSquare(colour, move.from);
-  if (origin !== null) score += 35 * threatsTo(state, seat, origin);
+  const value = 60 + to * 3;
+  const dangerAfter = move.reachesHome || landing === null ? 0 : threatsTo(state, seat, landing);
+  const origin = trackSquare(colour, from);
+  const dangerBefore = origin === null ? 0 : threatsTo(state, seat, origin);
+  score -= dangerAfter * value;
+  score += dangerBefore * value * 0.9;
+
+  // Do not walk a token off a safe square for nothing.
+  if (
+    origin !== null &&
+    isSafeSquare(origin) &&
+    !(landing !== null && isSafeSquare(landing)) &&
+    landing !== null
+  ) {
+    score -= 30;
+  }
   return score;
+}
+
+export function scoreLudoMove(state: LudoState, move: LudoMove, level: BotLevel): number {
+  if (level === 'hard') return hardScore(state, move);
+  return baseScore(move, state.colours[state.toMove] ?? 0);
 }
 
 /** The token a bot moves. Returns null when there is no legal move. */

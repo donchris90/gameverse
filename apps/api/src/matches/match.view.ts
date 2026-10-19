@@ -15,6 +15,7 @@ import type {
 } from '../generated/prisma/client.js';
 import { BOT_AVATAR_ID, BOT_NAME } from './matches.constants.js';
 import { ludoOf, toLudoView } from './ludo-driver.js';
+import { settlementOf } from './settlement.js';
 import { seriesOf } from './tictactoe.driver.js';
 import { draughtsOf, toDraughtsView } from './draughts.driver.js';
 import { ayoOf, toAyoView } from './ayo.driver.js';
@@ -86,6 +87,15 @@ function toPlayerView(player: GameMatchPlayer, profiles: ProfileLookup): MatchPl
   };
 }
 
+/** Bonus coins credited to the viewer when the match ended: their pot share or their refund. */
+function payoutFor(match: MatchRecord, viewerSeat: PlayerSeat): number {
+  const viewer = match.players.find((player) => player.seat === viewerSeat);
+  if (viewer === undefined || viewer.userId === null) return 0;
+  return settlementOf(match)
+    .filter((share) => share.userId === viewer.userId)
+    .reduce((sum, share) => sum + share.amount, 0);
+}
+
 /** What `viewerSeat` is allowed to see of a match. Nothing here is secret between the two seats. */
 export function toMatchView(
   match: MatchRecord,
@@ -118,6 +128,7 @@ export function toMatchView(
     ayo: ayo === null ? null : toAyoView(ayo),
     entryFee: match.entryFee,
     pot: match.entryFee * match.players.filter((player) => player.userId !== null).length,
+    payout: payoutFor(match, viewerSeat),
     deadline:
       match.deadlineKind === null || match.deadlineAt === null
         ? null

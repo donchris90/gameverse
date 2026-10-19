@@ -500,9 +500,11 @@ model GameMatch {
 
   /// Bonus coins each human paid to play, taken when the match was created; 0 for a free match.
   /// The winner gets all the fees, a draw or a match that never started returns them.
-  entryFee Int @default(0)
+  /// True while the AI is playing for a Ludo seat whose player is away. Lets the bot sweeper find the match.
+  aiCover  Boolean @default(false)
+  entryFee Int     @default(0)
   /// Tic-tac-toe only: 1 = a single game, 3 = best of three. Other games ignore it.
-  bestOf   Int @default(3)
+  bestOf   Int     @default(3)
 
   /// Which seat opens game 1 (alternates from one rematch to the next).
   openingSeat          Int     @default(0) @db.SmallInt

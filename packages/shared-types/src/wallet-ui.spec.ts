@@ -43,7 +43,14 @@ describe('coin banner', () => {
 });
 
 describe('entry summary', () => {
-  const base = { entryFee: 100, pot: 200, status: 'ACTIVE', winnerSeat: null, mySeat: 0 };
+  const base = {
+    entryFee: 100,
+    pot: 200,
+    payout: 0,
+    status: 'ACTIVE',
+    winnerSeat: null,
+    mySeat: 0,
+  };
   it('says nothing for a free match', () => {
     expect(entrySummary({ ...base, entryFee: 0, pot: 0 })).toBeNull();
   });
@@ -51,7 +58,7 @@ describe('entry summary', () => {
     expect(entrySummary(base)).toBe('Entry 100 bonus coins. Winner takes 200.');
   });
   it('says how a finished match ended for this player', () => {
-    expect(entrySummary({ ...base, status: 'COMPLETED', winnerSeat: 0 })).toBe(
+    expect(entrySummary({ ...base, status: 'COMPLETED', winnerSeat: 0, payout: 200 })).toBe(
       'You won 200 bonus coins.',
     );
     expect(entrySummary({ ...base, status: 'COMPLETED', winnerSeat: 1 })).toBe(
@@ -59,6 +66,22 @@ describe('entry summary', () => {
     );
     expect(entrySummary({ ...base, status: 'COMPLETED', winnerSeat: null })).toBe(
       'Draw. Your 100 entry coins were returned.',
+    );
+  });
+  it('names a share of the pot, and the two-thirds rule at a four-player Ludo table', () => {
+    const ludo4 = { ...base, gameId: 'ludo', players: [0, 1, 2, 3], pot: 400 };
+    expect(entrySummary(ludo4)).toBe(
+      'Entry 100 bonus coins. Pot 400: first takes two thirds, second one third.',
+    );
+    const done = { ...ludo4, status: 'COMPLETED' };
+    expect(entrySummary({ ...done, winnerSeat: 1, mySeat: 1, payout: 266 })).toBe(
+      'You received 266 bonus coins.',
+    );
+    expect(entrySummary({ ...done, winnerSeat: 1, mySeat: 2, payout: 134 })).toBe(
+      'You received 134 bonus coins.',
+    );
+    expect(entrySummary({ ...done, winnerSeat: 1, mySeat: 3, payout: 0 })).toBe(
+      'You lost your 100 entry coins.',
     );
   });
   it('says the coins came back when the match never started', () => {

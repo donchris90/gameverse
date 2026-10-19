@@ -30,6 +30,8 @@ export function ludoError(error: LudoError): AppException {
     case 'GAME_FINISHED':
     case 'INVALID_SEAT':
       return invalidState('The match is not accepting moves right now');
+    case 'NOT_COVERED':
+      return invalidState('The AI is not playing for you');
     case 'INVALID_DIE':
     case 'INVALID_TOKEN':
     case 'ILLEGAL_MOVE':

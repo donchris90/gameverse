@@ -17,6 +17,7 @@ export type DriverAction =
   | { kind: 'place'; cell: number }
   | { kind: 'roll' }
   | { kind: 'token'; token: number }
+  | { kind: 'resume' }
   | { kind: 'draughts'; from: number; path: number[] }
   | { kind: 'ayo'; pit: number }
   | { kind: 'ayo-end'; action: 'offer' | 'accept' | 'decline' };

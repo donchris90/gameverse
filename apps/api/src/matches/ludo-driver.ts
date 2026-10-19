@@ -84,6 +84,7 @@ export function toLudoView(stored: LudoStored): LudoView {
     moves,
     finished: [...state.finished],
     removed: [...state.removed],
+    ai: state.ai.map(Boolean),
     placings: state.placings === null ? null : [...state.placings],
     endReason: state.endReason,
     rolls: state.rolls,
@@ -101,7 +102,11 @@ export function afterLudoChange(
   now: Date,
   endReasonOverride?: string,
 ): Change['patch'] {
-  const patch: Prisma.GameMatchUncheckedUpdateManyInput = { state: ludoToJson(state, events) };
+  const patch: Prisma.GameMatchUncheckedUpdateManyInput = {
+    state: ludoToJson(state, events),
+    // Lets the bot sweeper find a match where the AI is playing for an absent human.
+    aiCover: state.phase !== 'finished' && state.ai.some(Boolean),
+  };
   if (state.phase !== 'finished') {
     patch.deadlineKind = 'TURN';
     patch.deadlineAt = new Date(now.getTime() + LUDO_TURN_TIMER_MS);

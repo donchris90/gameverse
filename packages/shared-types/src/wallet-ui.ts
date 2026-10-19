@@ -58,8 +58,13 @@ export function coinBanner(wallet: WalletView, now: Date = new Date()): CoinBann
 
 /** The parts of a match view the entry line needs. */
 export interface EntryMatch {
+  gameId?: string;
+  /** Everyone at the table; only the count is used. */
+  players?: readonly unknown[];
   entryFee: number;
   pot: number;
+  /** Coins paid to this player when the match ended (their pot share or a refund). */
+  payout: number;
   status: string;
   winnerSeat: number | null;
   mySeat: number;
@@ -77,12 +82,15 @@ export function entrySummary(match: EntryMatch): string | null {
     case 'WAITING':
     case 'READY':
     case 'ACTIVE':
-      return `Entry ${fee} bonus coins. Winner takes ${pot}.`;
+      return match.gameId === 'ludo' && match.players?.length === 4
+        ? `Entry ${fee} bonus coins. Pot ${pot}: first takes two thirds, second one third.`
+        : `Entry ${fee} bonus coins. Winner takes ${pot}.`;
     case 'COMPLETED':
       if (match.winnerSeat === null) return `Draw. Your ${fee} entry coins were returned.`;
-      return match.winnerSeat === match.mySeat
+      if (match.payout <= 0) return `You lost your ${fee} entry coins.`;
+      return match.payout >= match.pot
         ? `You won ${pot} bonus coins.`
-        : `You lost your ${fee} entry coins.`;
+        : `You received ${formatCoins(match.payout)} bonus coins.`;
     default:
       return `Match did not start. Your ${fee} entry coins were returned.`;
   }
