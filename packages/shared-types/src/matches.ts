@@ -152,39 +152,51 @@ export interface DraughtsView {
   last: DraughtsMoveView | null;
 }
 
-/** One step of an Ayo turn, in order, so the phone can animate the sowing. */
+/** One step of an Ayo turn, in order, so the phone can replay the sowing seed by seed. */
 export type AyoStepView =
   | { k: 'lift'; pit: number; count: number }
   | { k: 'drop'; pit: number }
-  | { k: 'reap'; pit: number; by: PlayerSeat; amount: number; all: boolean };
+  | { k: 'pack'; pit: number; by: PlayerSeat; amount: number }
+  | { k: 'final'; by: PlayerSeat; amount: number }
+  | { k: 'round'; round: number; owners: PlayerSeat[] };
 
 /**
- * Ayo state as the phone sees it. Pits are 0-11 counter-clockwise; seat 0 owns 0-5, seat 1 owns
- * 6-11. The server computes `moves`, so the phone never has to know the rules.
+ * Ayo state as the phone sees it (RRYDA rules). Pits are 0-11 counter-clockwise. Who owns a pit
+ * changes between rounds (`owners`). The server computes `moves`, so the phone never has to know
+ * the rules.
  */
 export interface AyoView {
   phase: 'playing' | 'finished';
   pits: number[];
-  /** Whether each pit is in the ring this round (pits are lost between rounds). */
-  alive: boolean[];
-  /** Seeds each seat has reaped and not yet put back on the board. */
-  stores: [number, number];
+  /** Which seat owns each pit this round. */
+  owners: PlayerSeat[];
+  /** Seeds each seat has packed this round. */
+  packed: [number, number];
   toMove: PlayerSeat | null;
   round: number;
   starter: PlayerSeat;
   /** Pits the seat on turn may lift. */
   moves: number[];
+  /** The seat that must choose to quit or continue (it started the round with one pit), if any. */
+  decision: PlayerSeat | null;
   winner: PlayerSeat | 'draw' | null;
-  endReason: 'one_pit' | 'agreement' | 'timeout' | 'forfeit' | null;
-  /** Seat that has offered to end the game by agreement, if any. */
-  endOffer: PlayerSeat | null;
-  /** True while a player has exactly two pits, when an end by agreement may be offered. */
-  canOfferEnd: boolean;
-  /** Seeds each seat holds in total (store plus own side), for the final count. */
-  totals: [number, number];
+  endReason: 'no_pits' | 'quit' | 'max_rounds' | 'timeout' | 'forfeit' | null;
   plies: number;
-  last: { seat: PlayerSeat; pit: number; steps: AyoStepView[] } | null;
-  lastRound: { round: number; winner: PlayerSeat; took: number } | null;
+  /** The move just played, with the table as it was before it, for the seed-by-seed replay. */
+  last: {
+    seat: PlayerSeat;
+    pit: number;
+    steps: AyoStepView[];
+    before: { pits: number[]; owners: PlayerSeat[]; packed: [number, number] };
+    /** How long the replay takes; the next turn clock starts after it. */
+    animMs: number;
+  } | null;
+  lastRound: {
+    round: number;
+    packed: [number, number];
+    pits: [number, number];
+    finalTo: PlayerSeat | null;
+  } | null;
 }
 
 export interface MatchView {
@@ -300,12 +312,12 @@ export const ayoMoveSchema = z
   .strict();
 export type AyoMoveRequest = z.input<typeof ayoMoveSchema>;
 
-/** Ayo: offer to end the game by agreement, or answer an offer. */
-export const ayoEndSchema = z
+/** Ayo: the player who started a round with one pit chooses to quit (and lose) or continue. */
+export const ayoDecisionSchema = z
   .object({
-    action: z.enum(['offer', 'accept', 'decline']),
+    quit: z.boolean(),
     clientActionId: z.uuid(),
     expectedVersion: z.number().int().min(0),
   })
   .strict();
-export type AyoEndRequest = z.input<typeof ayoEndSchema>;
+export type AyoDecisionRequest = z.input<typeof ayoDecisionSchema>;

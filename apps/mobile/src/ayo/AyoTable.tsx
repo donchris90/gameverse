@@ -16,7 +16,8 @@ export interface AyoTableProps {
   mySeat: PlayerSeat;
   /** Seeds in each pit as shown now (mid-replay or the real board). */
   pits: readonly number[];
-  alive: readonly boolean[];
+  /** Which seat owns each pit now (it changes between rounds). */
+  owners: readonly PlayerSeat[];
   /** Pits the player may tap now. */
   movable: ReadonlySet<number>;
   /** The pit being sown into right now. */
@@ -29,23 +30,23 @@ export interface AyoTableProps {
   width: number;
   opponentName: string;
   roundLabel: string;
+  /** A short line over the board while a turn is replayed ("You packed 4", "Round 2"). */
+  banner?: string | null;
   onPit: (pit: number) => void;
 }
 
 /** The standing wooden board: two columns of six bowls, drawn with plain views. */
 export function AyoTable(props: AyoTableProps) {
-  const { mySeat, pits, alive, movable, hot, trail, replaying, width, opponentName } = props;
+  const { mySeat, pits, owners, movable, hot, trail, replaying, width, opponentName } = props;
   const columns = ayoColumns(mySeat);
   const bowl = Math.max(54, Math.min(Math.round((width - 64) / 2 / 1.1), 72));
   const seed = Math.round(bowl * 0.23);
   const inner = bowl - 18;
   const boardWidth = bowl * 2 + 14 + 20 + 4 + 28;
-  const mineStart = mySeat === 0 ? 0 : 6;
 
   const renderPit = (pit: number) => {
     const count = pits[pit] ?? 0;
-    const isAlive = alive[pit] ?? true;
-    const mine = pit >= mineStart && pit < mineStart + 6;
+    const mine = owners[pit] === mySeat;
     const tappable = movable.has(pit) && !replaying;
     const lit = hot === pit;
     return (
@@ -54,26 +55,21 @@ export function AyoTable(props: AyoTableProps) {
         disabled={!tappable}
         onPress={() => props.onPit(pit)}
         accessibilityRole="button"
-        accessibilityLabel={
-          isAlive
-            ? `${mine ? 'Your' : 'Their'} pit ${String(pit + 1)}, ${String(count)} seeds${
-                tappable ? ', tap to play' : ''
-              }`
-            : `Pit ${String(pit + 1)}, out of the game`
-        }
+        accessibilityLabel={`${mine ? 'Your' : 'Their'} pit ${String(pit + 1)}, ${String(count)} seeds${
+          tappable ? ', tap to play' : ''
+        }`}
         accessibilityState={{ disabled: !tappable }}
         style={{
           width: bowl,
           height: bowl,
           alignSelf: 'center',
-          opacity: isAlive ? 1 : 0.25,
           transform: [{ scale: lit ? 1.06 : 1 }],
         }}
       >
         <View
           style={[
             styles.ring,
-            mine && isAlive && styles.ringMine,
+            mine && styles.ringMine,
             trail.includes(pit) && !lit && styles.ringTrail,
             tappable && styles.ringTap,
             lit && styles.ringHot,
@@ -81,36 +77,32 @@ export function AyoTable(props: AyoTableProps) {
         >
           <View style={styles.bowl}>
             <View style={styles.bowlInner}>
-              {isAlive
-                ? Array.from({ length: Math.min(count, MAX_SEEDS_SHOWN) }).map((_, k) => {
-                    const spot = seedSpot(k, bowl);
-                    return (
-                      <View
-                        key={k}
-                        style={[
-                          styles.seed,
-                          {
-                            width: seed,
-                            height: seed * 0.86,
-                            left: inner / 2 + spot.x - seed / 2,
-                            top: inner / 2 + spot.y - seed * 0.43,
-                            backgroundColor: AYO.seeds[k % AYO.seeds.length],
-                            transform: [{ rotate: `${String((k * 53) % 180)}deg` }],
-                          },
-                          lit && k === count - 1 && replaying && styles.seedNew,
-                        ]}
-                      />
-                    );
-                  })
-                : null}
+              {Array.from({ length: Math.min(count, MAX_SEEDS_SHOWN) }).map((_, k) => {
+                const spot = seedSpot(k, bowl);
+                return (
+                  <View
+                    key={k}
+                    style={[
+                      styles.seed,
+                      {
+                        width: seed,
+                        height: seed * 0.86,
+                        left: inner / 2 + spot.x - seed / 2,
+                        top: inner / 2 + spot.y - seed * 0.43,
+                        backgroundColor: AYO.seeds[k % AYO.seeds.length],
+                        transform: [{ rotate: `${String((k * 53) % 180)}deg` }],
+                      },
+                      lit && k === count - 1 && replaying && styles.seedNew,
+                    ]}
+                  />
+                );
+              })}
             </View>
           </View>
         </View>
-        {isAlive ? (
-          <View style={[styles.badge, count === 0 && { opacity: 0.45 }]}>
-            <Text style={styles.badgeText}>{count}</Text>
-          </View>
-        ) : null}
+        <View style={[styles.badge, count === 0 && { opacity: 0.45 }]}>
+          <Text style={styles.badgeText}>{count}</Text>
+        </View>
       </Pressable>
     );
   };
@@ -121,7 +113,9 @@ export function AyoTable(props: AyoTableProps) {
         <Text style={styles.head} numberOfLines={1}>
           {opponentName} ▼
         </Text>
-        <Text style={styles.round}>{props.roundLabel}</Text>
+        <Text style={[styles.round, props.banner ? styles.roundHot : null]} numberOfLines={1}>
+          {props.banner ?? props.roundLabel}
+        </Text>
         <Text style={[styles.head, { textAlign: 'right' }]} numberOfLines={1}>
           ▲ You
         </Text>
@@ -158,6 +152,14 @@ const styles = StyleSheet.create({
   round: { color: AYO.woodInk, fontSize: 10, fontWeight: '900', letterSpacing: 1 },
   cols: { flexDirection: 'row', gap: 14 },
   col: { flex: 1, gap: 6 },
+  roundHot: {
+    overflow: 'hidden',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    backgroundColor: AYO.bg,
+    color: AYO.gold,
+  },
   seam: {
     position: 'absolute',
     left: '50%',

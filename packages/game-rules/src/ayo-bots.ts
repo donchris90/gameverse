@@ -1,12 +1,29 @@
-import { applyAyoMove, legalAyoMoves, seedsOf, type AyoSeat, type AyoState } from './ayo.js';
+import { applyAyoMove, legalAyoMoves, sowAyo, type AyoSeat, type AyoState } from './ayo.js';
 
 export type AyoBotLevel = 'easy' | 'medium' | 'hard';
 
-/** Seeds that are mine (store plus my side) against the opponent's, from `seat`'s point of view. */
+const other = (seat: AyoSeat): AyoSeat => (seat === 0 ? 1 : 0);
+
+/** What a pit would pack for the mover, minus what its sowing hands to the opponent (RRYDA's bot). */
+function netGain(state: AyoState, pit: number): number {
+  const seat = state.toMove;
+  const sow = sowAyo(state.pits, state.owners, seat, pit);
+  return sow.packedBy[seat] - sow.packedBy[other(seat)];
+}
+
+/**
+ * How well `seat` stands: seeds packed this round, plus a share of the seeds on its own side.
+ * Pits owned count too, because pits are what the next round is built from.
+ */
 function evaluate(state: AyoState, seat: AyoSeat): number {
-  const mine = seedsOf(state, seat);
-  const theirs = seedsOf(state, seat === 0 ? 1 : 0);
-  return (state.stores[seat] - state.stores[seat === 0 ? 1 : 0]) * 3 + (mine - theirs);
+  const them = other(seat);
+  let mine = 0;
+  let theirs = 0;
+  for (let pit = 0; pit < state.pits.length; pit += 1) {
+    if (state.owners[pit] === seat) mine += state.pits[pit] ?? 0;
+    else theirs += state.pits[pit] ?? 0;
+  }
+  return (state.packed[seat] - state.packed[them]) * 3 + (mine - theirs);
 }
 
 function search(
@@ -22,7 +39,7 @@ function search(
     if (state.winner === 'draw') return 0;
     return state.winner === seat ? 100_000 + depth : -100_000 - depth;
   }
-  if (depth === 0 || budget.nodes <= 0) return evaluate(state, seat);
+  if (depth === 0 || budget.nodes <= 0 || state.decision !== null) return evaluate(state, seat);
   const maximizing = state.toMove === seat;
   let best = maximizing ? -Infinity : Infinity;
   for (const pit of legalAyoMoves(state)) {
@@ -44,6 +61,9 @@ function search(
 /**
  * Picks a pit for the side to move. Every candidate comes from `legalAyoMoves`, so a bot can
  * never play a move a human could not. `random` returns [0, 1) and is injected.
+ *  - easy: any pit.
+ *  - medium: RRYDA's bot. Three times in four it plays a pit with the best net pack, else any pit.
+ *  - hard: looks a few turns ahead and keeps the best.
  */
 export function chooseAyoMove(
   state: AyoState,
@@ -56,15 +76,21 @@ export function chooseAyoMove(
     list[Math.min(list.length - 1, Math.floor(random() * list.length))] as number;
   if (level === 'easy') return pick(moves);
 
+  if (level === 'medium') {
+    const scored = moves.map((pit) => ({ pit, gain: netGain(state, pit) }));
+    const best = Math.max(...scored.map((entry) => entry.gain));
+    const pool = random() < 0.75 ? scored.filter((entry) => entry.gain === best) : scored;
+    return pick(pool.map((entry) => entry.pit));
+  }
+
   const seat = state.toMove;
-  const depth = level === 'medium' ? 2 : 6;
-  const budget = { nodes: level === 'medium' ? 600 : 6_000 };
+  const budget = { nodes: 4_000 };
   let bestScore = -Infinity;
   let best: number[] = [];
   for (const pit of moves) {
     const result = applyAyoMove(state, seat, pit);
     if (!result.ok) continue;
-    const score = search(result.state, depth - 1, -Infinity, Infinity, seat, budget);
+    const score = search(result.state, 3, -Infinity, Infinity, seat, budget);
     if (score > bestScore) {
       bestScore = score;
       best = [pit];

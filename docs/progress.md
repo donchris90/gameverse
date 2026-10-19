@@ -494,3 +494,16 @@ Real results:
 - `cd apps/api && ... vitest run --config ./vitest.config.e2e.ts ludo` → 3 files, 60 tests passed.
   Full gate, smoke and prettier results are added below after the run.
 - Full gate `PRISMA_SCHEMA_ENGINE_BINARY=/bin/true pnpm exec turbo run lint typecheck build test --env-mode=loose --continue` → 22/22 tasks successful. `npx prettier --check .` → all files formatted. Full integration suite and smoke-dist not re-run for this slice (only the ludo integration files, above).
+
+## Slice 9B: Ayo on the RRYDA rules and replay (owner 2026-10-19; decision #119; not seen on a phone)
+
+Changed: Ayo rules, bots, driver, API, replay and screens now follow RRYDA (12 pits/48 seeds, pack at 4, relay, rounds until 4 or fewer seeds, quit/continue on one pit, 30-round cap, server plays a slow player's turn, 60 s per-game disconnect grace, turn clock starts after the replay, RRYDA replay timings shared by server and app). Details: `docs/ayo-rules.md`, `docs/ayo-port-differences.md`, `docs/ayo-verification.md`.
+Tests rewritten entirely because the rules changed (none skipped or loosened): `packages/game-rules/src/ayo.spec.ts`, `packages/shared-types/src/ayo-ui.spec.ts`, `apps/api/test/ayo.e2e-spec.ts`.
+Real results:
+
+- `cd packages/game-rules && pnpm exec vitest run` → 9 files, 202 tests passed.
+- `cd packages/shared-types && pnpm exec vitest run` → all passed (see gate).
+- `cd apps/api && PRISMA_SCHEMA_ENGINE_BINARY=/bin/true pnpm exec vitest run --config ./vitest.config.e2e.ts` → Test Files 35 passed (35), Tests 655 passed (655).
+- `bash apps/api/scripts/smoke-dist.sh` → "compiled API is up and ready".
+- Gate `PRISMA_SCHEMA_ENGINE_BINARY=/bin/true pnpm exec turbo run lint typecheck build test --env-mode=loose --continue` → Tasks: 22 successful, 22 total. `npx prettier --check .` → all matched files formatted (after formatting ayo.ts and ayo.spec.ts).
+- Unverified: replay speed and feel on a phone; the 20 s turn clock and 60 s grace with real networks.

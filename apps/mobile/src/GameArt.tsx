@@ -41,7 +41,7 @@ export const GAME_INFO: Record<GameId, GameInfo> = {
   ayo: {
     id: 'ayo',
     name: 'Ayo',
-    tagline: 'Sow the seeds, reap every four. The classic Yoruba game.',
+    tagline: 'Sow the seeds, pack every four. The classic Yoruba game.',
     tags: ['2 players', '15 min'],
     banner: '#3B2A14',
   },

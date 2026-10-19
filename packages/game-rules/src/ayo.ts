@@ -1,69 +1,111 @@
 /**
- * Ayo (Ayo Olopon), exactly as approved in docs/ayo-rules.md. Pure and deterministic: nothing here
- * reads a clock or a random source, and every function returns a new state.
+ * Ayo, with the RRYDA house rules (owner decision 2026-10-19, decision #118). Pure and
+ * deterministic: nothing here reads a clock or a random source, and every function returns a new
+ * state. The full rules are in docs/ayo-rules.md.
  *
- * Twelve pits in a ring, numbered 0-11 counter-clockwise. Seat 0 owns pits 0-5, seat 1 owns pits
- * 6-11. A pit that has been lost between rounds is out of the ring (`alive` is false). Seeds are
- * conserved: board + both stores + the seeds in the hand always add up to 48.
+ *  - 12 pits in a ring, numbered 0-11 counter-clockwise, 48 seeds. Round 1: seat 0 owns pits 0-5,
+ *    seat 1 owns pits 6-11, four seeds in every pit.
+ *  - A move: lift all the seeds of one of YOUR pits that has seeds and sow them one by one into the
+ *    next pits, counter-clockwise, round the whole ring (the pit you lifted from is not skipped).
+ *  - Relay: if the last seed lands in a pit that already held seeds, lift them all and keep sowing.
+ *    The turn ends when the last seed lands in an empty pit.
+ *  - Packing: a pit that reaches exactly four is packed. In the middle of a sow the four go to the
+ *    pit's OWNER; if it is the last seed of a sow the SOWER takes them (on either side) and the turn
+ *    ends.
+ *  - A player with no seeds on their side skips their turn.
+ *  - When four seeds or fewer are left on the board, they go to whoever packed last and the round
+ *    ends. Rounds also end when the board is empty.
+ *  - Next round: each player makes as many pits of four as they packed allows (28 seeds = 7 pits);
+ *    the pits of seat 0 come first in the ring. The starter alternates every round.
+ *  - A player who starts a round with exactly ONE pit may quit (and lose) or continue. A player with
+ *    no pit loses. After MAX_ROUNDS rounds the player with more pits wins (equal = draw).
+ *
+ * Seeds are conserved: board + both packed counts always add up to 48 inside a round.
  */
 
 export type AyoSeat = 0 | 1;
 
 export const AYO_PITS = 12;
-export const AYO_PITS_PER_SIDE = 6;
 export const AYO_START_SEEDS = 4;
 export const AYO_TOTAL_SEEDS = 48;
+/** One turn clock. */
 export const AYO_TURN_TIMER_MS = 20_000;
-/** A round ends when this many seeds are left and somebody reaps. */
-export const AYO_LAST_SEEDS = 8;
-/** A lift of at least this many seeds skips the pit it was lifted from on each lap. */
-export const AYO_LAP_SKIP_FROM = 12;
-/**
- * Safety valve: a turn that relays more often than this stops where it is. A relay that returns to
- * a position it was already in ends the turn earlier (see `sow`), so this is only a second guard.
- */
-export const AYO_MAX_LIFTS = 400;
+/** A player who has to choose quit or continue has this long. */
+export const AYO_DECISION_MS = 30_000;
+/** Sowing steps per move before the hand is put down (a guard; real turns are far shorter). */
+export const AYO_MAX_SOW_STEPS = 2000;
+/** Turns in one round before the rest of the board goes to the last packer. */
+export const AYO_MAX_ROUND_TURNS = 400;
+/** Rounds in one game before the player with more pits wins. */
+export const AYO_MAX_ROUNDS = 30;
+/** Turns in a row the server may play for a player whose clock ran out before they forfeit. */
+export const AYO_MAX_AUTO_PLAYS = 3;
 
-export type AyoEndReason = 'one_pit' | 'agreement' | 'timeout' | 'forfeit';
+export type AyoEndReason = 'no_pits' | 'quit' | 'max_rounds' | 'timeout' | 'forfeit';
 
-/** One step of a turn, in order, so the app can animate it. */
+/** One step of a turn, in order, so the app can replay it seed by seed. */
 export type AyoStep =
+  /** Seeds lifted from a pit (the start of a move, or a relay). */
   | { k: 'lift'; pit: number; count: number }
+  /** One seed dropped into a pit. */
   | { k: 'drop'; pit: number }
-  /** `by` reaped the seeds in `pit`; `all` is true when it took the whole table (round over). */
-  | { k: 'reap'; pit: number; by: AyoSeat; amount: number; all: boolean };
+  /** A pit reached four and `by` packed it. */
+  | { k: 'pack'; pit: number; by: AyoSeat; amount: number }
+  /** The last seeds of the round went to `by`, the last packer. */
+  | { k: 'final'; by: AyoSeat; amount: number }
+  /** A new round was set up; `owners` says who owns which pit in it. */
+  | { k: 'round'; round: number; owners: readonly AyoSeat[] };
+
+/** The table as it stood before a move, so the app can replay the move from the start. */
+export interface AyoBefore {
+  readonly pits: readonly number[];
+  readonly owners: readonly AyoSeat[];
+  readonly packed: readonly [number, number];
+}
 
 export interface AyoMoveRecord {
   readonly seat: AyoSeat;
   readonly pit: number;
   readonly steps: readonly AyoStep[];
+  readonly before: AyoBefore;
+}
+
+export interface AyoRoundSummary {
+  readonly round: number;
+  /** What each seat packed in the round (the last seeds included). */
+  readonly packed: readonly [number, number];
+  /** How many pits of four each seat gets next round. */
+  readonly pits: readonly [number, number];
+  /** The seat that received the last seeds of the round, if there were any. */
+  readonly finalTo: AyoSeat | null;
 }
 
 export interface AyoState {
   /** Seeds in each pit. */
   readonly pits: readonly number[];
-  /** Whether each pit is in the ring this round. */
-  readonly alive: readonly boolean[];
-  /** Seeds each seat has reaped and not yet put back on the board. */
-  readonly stores: readonly [number, number];
+  /** Which seat owns each pit this round. */
+  readonly owners: readonly AyoSeat[];
+  /** Seeds each seat has packed this round. */
+  readonly packed: readonly [number, number];
   readonly toMove: AyoSeat;
   readonly phase: 'playing' | 'finished';
   /** 1 for the first round. */
   readonly round: number;
-  /** Who started the current round. */
+  /** Who made (or makes) the first move of the current round. */
   readonly starter: AyoSeat;
+  /** The seat that packed last this round; it gets the last seeds. */
+  readonly lastPacker: AyoSeat | null;
+  readonly roundTurns: number;
+  /** A seat that started the round with one pit and must choose to quit or continue. */
+  readonly decision: AyoSeat | null;
+  /** Turns in a row, per seat, that the server played because the clock ran out. */
+  readonly autoPlays: readonly [number, number];
   readonly winner: AyoSeat | 'draw' | null;
   readonly endReason: AyoEndReason | null;
-  /** Seat that has offered to end the game by agreement, if any. */
-  readonly endOffer: AyoSeat | null;
   readonly plies: number;
   readonly last: AyoMoveRecord | null;
   /** How the previous round ended, for the app to announce. */
-  readonly lastRound: {
-    readonly round: number;
-    readonly winner: AyoSeat;
-    readonly took: number;
-  } | null;
+  readonly lastRound: AyoRoundSummary | null;
 }
 
 export type AyoError =
@@ -71,325 +113,332 @@ export type AyoError =
   | 'GAME_FINISHED'
   | 'INVALID_PIT'
   | 'ILLEGAL_MOVE'
-  | 'END_NOT_ALLOWED'
-  | 'NO_OFFER'
-  | 'OWN_OFFER';
+  | 'DECISION_PENDING'
+  | 'NO_DECISION';
 
 export type AyoEvent =
-  | { type: 'MOVED'; seat: AyoSeat; pit: number; steps: AyoStep[]; reaped: [number, number] }
-  | { type: 'ROUND_ENDED'; round: number; winner: AyoSeat; took: number }
+  | { type: 'MOVED'; seat: AyoSeat; pit: number; steps: AyoStep[]; packed: [number, number] }
+  | { type: 'ROUND_ENDED'; round: number; packed: [number, number]; finalTo: AyoSeat | null }
   | { type: 'ROUND_STARTED'; round: number; starter: AyoSeat; pits: [number, number] }
-  | { type: 'END_OFFERED'; seat: AyoSeat }
-  | { type: 'END_DECLINED'; seat: AyoSeat }
+  | { type: 'DECISION_REQUIRED'; seat: AyoSeat }
+  | { type: 'DECIDED'; seat: AyoSeat; quit: boolean }
+  | { type: 'AUTO_PLAYED'; seat: AyoSeat }
   | { type: 'GAME_ENDED'; winner: AyoSeat | 'draw'; reason: AyoEndReason };
 
 export type AyoResult =
   { ok: true; state: AyoState; events: AyoEvent[] } | { ok: false; error: AyoError };
 
-export const ownerOfPit = (pit: number): AyoSeat => (pit < AYO_PITS_PER_SIDE ? 0 : 1);
 const other = (seat: AyoSeat): AyoSeat => (seat === 0 ? 1 : 0);
 const sum = (values: readonly number[]): number => values.reduce((a, b) => a + b, 0);
 
-/** Pits a seat gets when it fills its row from `store` seeds (four each, at most six). */
-export const pitsFor = (store: number): number =>
-  Math.min(AYO_PITS_PER_SIDE, Math.floor(store / AYO_START_SEEDS));
+/** Round 1: seat 0 owns pits 0-5, seat 1 owns pits 6-11. */
+export const defaultOwners = (): AyoSeat[] =>
+  Array.from({ length: AYO_PITS }, (_, pit): AyoSeat => (pit < AYO_PITS / 2 ? 0 : 1));
 
-/** Number of pits in the ring on a seat's side. */
-export function livePits(state: AyoState, seat: AyoSeat): number {
-  let count = 0;
-  for (let pit = 0; pit < AYO_PITS; pit += 1) {
-    if (ownerOfPit(pit) === seat && state.alive[pit]) count += 1;
-  }
-  return count;
+/** Seat 0 owns pits [0, k); seat 1 owns the rest. An extra pit sits next to your row. */
+export function ownersForPits(seat0Pits: number): AyoSeat[] {
+  const k = Math.max(0, Math.min(AYO_PITS, seat0Pits));
+  return Array.from({ length: AYO_PITS }, (_, pit): AyoSeat => (pit < k ? 0 : 1));
 }
 
-/** Seeds a seat could still use: its store plus what sits on its side of the board. */
-export function seedsOf(state: AyoState, seat: AyoSeat): number {
-  let onBoard = 0;
-  for (let pit = 0; pit < AYO_PITS; pit += 1) {
-    if (ownerOfPit(pit) === seat) onBoard += state.pits[pit] ?? 0;
-  }
-  return (state.stores[seat] ?? 0) + onBoard;
-}
+export const ownerOfPit = (state: Pick<AyoState, 'owners'>, pit: number): AyoSeat =>
+  state.owners[pit] ?? (pit < AYO_PITS / 2 ? 0 : 1);
 
-function setupRound(stores: readonly [number, number]): {
-  pits: number[];
-  alive: boolean[];
-  stores: [number, number];
-  counts: [number, number];
-} {
-  const counts: [number, number] = [pitsFor(stores[0]), pitsFor(stores[1])];
-  const pits = Array.from({ length: AYO_PITS }, () => 0);
-  const alive = Array.from({ length: AYO_PITS }, () => false);
-  for (const seat of [0, 1] as const) {
-    for (let index = 0; index < counts[seat]; index += 1) {
-      const pit = seat * AYO_PITS_PER_SIDE + index;
-      alive[pit] = true;
-      pits[pit] = AYO_START_SEEDS;
-    }
+/** Number of pits a seat owns this round. */
+export const pitCount = (state: Pick<AyoState, 'owners'>, seat: AyoSeat): number =>
+  state.owners.filter((owner) => owner === seat).length;
+
+/** Seeds on a seat's side of the board. */
+export function seedsOnSide(state: AyoState, seat: AyoSeat): number {
+  let total = 0;
+  for (let pit = 0; pit < AYO_PITS; pit += 1) {
+    if (state.owners[pit] === seat) total += state.pits[pit] ?? 0;
   }
-  return {
-    pits,
-    alive,
-    stores: [stores[0] - counts[0] * AYO_START_SEEDS, stores[1] - counts[1] * AYO_START_SEEDS],
-    counts,
-  };
+  return total;
 }
 
 /** A new match. `opening` moves first. */
 export function createAyo(opening: AyoSeat): AyoState {
   return {
     pits: Array.from({ length: AYO_PITS }, () => AYO_START_SEEDS),
-    alive: Array.from({ length: AYO_PITS }, () => true),
-    stores: [0, 0],
+    owners: defaultOwners(),
+    packed: [0, 0],
     toMove: opening,
     phase: 'playing',
     round: 1,
     starter: opening,
+    lastPacker: null,
+    roundTurns: 0,
+    decision: null,
+    autoPlays: [0, 0],
     winner: null,
     endReason: null,
-    endOffer: null,
     plies: 0,
     last: null,
     lastRound: null,
   };
 }
 
-/** Pits the side to move may lift now. */
-export function legalAyoMoves(state: AyoState): number[] {
-  if (state.phase === 'finished') return [];
-  const moves: number[] = [];
+/** Pits of `seat` that have seeds. */
+function pitsWithSeeds(state: AyoState, seat: AyoSeat): number[] {
+  const out: number[] = [];
   for (let pit = 0; pit < AYO_PITS; pit += 1) {
-    if (ownerOfPit(pit) === state.toMove && state.alive[pit] && (state.pits[pit] ?? 0) > 0) {
-      moves.push(pit);
-    }
+    if (state.owners[pit] === seat && (state.pits[pit] ?? 0) > 0) out.push(pit);
   }
-  return moves;
+  return out;
 }
 
-interface TurnOutcome {
+/** Pits the side to move may lift now (none while a quit-or-continue choice is waiting). */
+export function legalAyoMoves(state: AyoState): number[] {
+  if (state.phase === 'finished' || state.decision !== null) return [];
+  return pitsWithSeeds(state, state.toMove);
+}
+
+export interface SowOutcome {
   pits: number[];
-  stores: [number, number];
+  /** Seeds each seat received while sowing. */
+  packedBy: [number, number];
+  /** Seeds the sower received. */
+  packedBySower: number;
+  /** Who received the last pack of the move. */
+  lastReceiver: AyoSeat | null;
   steps: AyoStep[];
-  /** Set when the whole table was taken: the round is over and this seat won it. */
-  roundWinner: AyoSeat | null;
-  took: number;
 }
 
-/** Plays one full turn (lifts, relays, reaps) for `seat` from `pit`. */
-function sow(state: AyoState, seat: AyoSeat, pit: number): TurnOutcome {
-  const pits = state.pits.slice();
-  const stores: [number, number] = [state.stores[0], state.stores[1]];
-  const steps: AyoStep[] = [];
-  const next = (from: number, skip: number): number => {
-    let cursor = from;
-    for (let guard = 0; guard < AYO_PITS * 2; guard += 1) {
-      cursor = (cursor + 1) % AYO_PITS;
-      if (state.alive[cursor] && cursor !== skip) return cursor;
+/** Pure sowing of one move for `seat` from `pit`. It always ends (AYO_MAX_SOW_STEPS). */
+export function sowAyo(
+  input: readonly number[],
+  owners: readonly AyoSeat[],
+  seat: AyoSeat,
+  pit: number,
+): SowOutcome {
+  const pits = input.slice();
+  let hand = pits[pit] ?? 0;
+  pits[pit] = 0;
+  const steps: AyoStep[] = [{ k: 'lift', pit, count: hand }];
+  const packedBy: [number, number] = [0, 0];
+  let lastReceiver: AyoSeat | null = null;
+  let cursor = pit;
+  let sown = 0;
+  while (hand > 0) {
+    cursor = (cursor + 1) % AYO_PITS;
+    pits[cursor] = (pits[cursor] ?? 0) + 1;
+    hand -= 1;
+    sown += 1;
+    steps.push({ k: 'drop', pit: cursor });
+    if (pits[cursor] === 4) {
+      // The last seed of the move: the sower takes it, even on the other side. Mid-sow: the owner.
+      const to: AyoSeat = hand === 0 ? seat : (owners[cursor] ?? seat);
+      pits[cursor] = 0;
+      packedBy[to] += 4;
+      lastReceiver = to;
+      steps.push({ k: 'pack', pit: cursor, by: to, amount: 4 });
+      continue; // a packed last seed leaves an empty pit: the turn ends
     }
-    return from;
-  };
-
-  let lifted = pit;
-  // A relay can come back to a position it has already been in; it would then go round forever.
-  // The turn ends at that point.
-  const seen = new Set<string>();
-  for (let lifts = 0; lifts < AYO_MAX_LIFTS; lifts += 1) {
-    const key = `${String(lifted)}:${pits.join(',')}:${String(stores[0])}`;
-    if (seen.has(key)) break;
-    seen.add(key);
-    const count = pits[lifted] ?? 0;
-    pits[lifted] = 0;
-    steps.push({ k: 'lift', pit: lifted, count });
-    const skip = count >= AYO_LAP_SKIP_FROM ? lifted : -1;
-    let cursor = lifted;
-    let landedOn = lifted;
-    let reapedLast = false;
-    for (let index = 0; index < count; index += 1) {
-      cursor = next(cursor, skip);
-      pits[cursor] = (pits[cursor] ?? 0) + 1;
-      steps.push({ k: 'drop', pit: cursor });
-      const isLast = index === count - 1;
-      landedOn = cursor;
-      if (pits[cursor] === 4) {
-        const hand = count - index - 1;
-        const reaper: AyoSeat = ownerOfPit(cursor) === seat ? seat : isLast ? seat : other(seat);
-        const onTable = sum(pits) + hand;
-        if (onTable === AYO_LAST_SEEDS) {
-          // The last eight: whoever reaps takes the lot and the round is over.
-          const took = onTable;
-          stores[reaper] += took;
-          steps.push({ k: 'reap', pit: cursor, by: reaper, amount: took, all: true });
-          for (let p = 0; p < AYO_PITS; p += 1) pits[p] = 0;
-          return { pits, stores, steps, roundWinner: reaper, took };
-        }
-        stores[reaper] += 4;
-        pits[cursor] = 0;
-        steps.push({ k: 'reap', pit: cursor, by: reaper, amount: 4, all: false });
-        if (isLast) reapedLast = true;
-      }
+    if (hand === 0 && (pits[cursor] ?? 0) > 1) {
+      // The last seed landed in a pit that already held seeds: lift them and carry on.
+      hand = pits[cursor] ?? 0;
+      pits[cursor] = 0;
+      steps.push({ k: 'lift', pit: cursor, count: hand });
     }
-    // A last seed in a pit that already held seeds (and was not reaped) is a relay.
-    if (!reapedLast && (pits[landedOn] ?? 0) >= 2) {
-      lifted = landedOn;
-      continue;
+    if (sown >= AYO_MAX_SOW_STEPS && hand > 0) {
+      pits[cursor] = (pits[cursor] ?? 0) + hand; // guard: put the hand down; seeds are conserved
+      hand = 0;
     }
-    break;
   }
-  return { pits, stores, steps, roundWinner: null, took: 0 };
+  return { pits, packedBy, packedBySower: packedBy[seat], lastReceiver, steps };
 }
 
-function finishMatch(
+function finish(
   state: AyoState,
   winner: AyoSeat | 'draw',
   reason: AyoEndReason,
 ): { state: AyoState; events: AyoEvent[] } {
   return {
-    state: { ...state, phase: 'finished', winner, endReason: reason, endOffer: null },
+    state: { ...state, phase: 'finished', winner, endReason: reason, decision: null },
     events: [{ type: 'GAME_ENDED', winner, reason }],
   };
 }
 
-/** Closes a round won by `winner`, then starts the next one or ends the match. */
-function closeRound(
-  state: AyoState,
-  winner: AyoSeat,
-  took: number,
-  stores: readonly [number, number],
-): { state: AyoState; events: AyoEvent[] } {
-  const events: AyoEvent[] = [{ type: 'ROUND_ENDED', round: state.round, winner, took }];
-  const setup = setupRound(stores);
-  const lastRound = { round: state.round, winner, took };
-  if (setup.counts[0] <= 1 || setup.counts[1] <= 1) {
-    // A player cannot fill more than one pit: the match is over.
-    const loser: AyoSeat = setup.counts[0] <= 1 ? 0 : 1;
-    const done = finishMatch(
-      {
-        ...state,
-        pits: Array.from({ length: AYO_PITS }, () => 0),
-        stores: [stores[0], stores[1]],
-        lastRound,
-      },
-      other(loser),
-      'one_pit',
+/**
+ * Ends the current round: the last seeds go to the last packer, then the next round is set up (or
+ * the game ends). `steps` gets the closing steps so the app can replay them.
+ */
+function endRound(input: AyoState, steps: AyoStep[]): { state: AyoState; events: AyoEvent[] } {
+  let state = input;
+  const left = sum(state.pits);
+  const packed: [number, number] = [state.packed[0], state.packed[1]];
+  let finalTo: AyoSeat | null = null;
+  if (left > 0) {
+    // The last seeds go to whoever packed before them (the opponent of the mover if nobody has).
+    finalTo = state.lastPacker ?? other(state.toMove);
+    packed[finalTo] += left;
+    steps.push({ k: 'final', by: finalTo, amount: left });
+    state = { ...state, pits: Array.from({ length: AYO_PITS }, () => 0) };
+  }
+  const pits: [number, number] = [
+    Math.floor(packed[0] / AYO_START_SEEDS),
+    Math.floor(packed[1] / AYO_START_SEEDS),
+  ];
+  const lastRound: AyoRoundSummary = { round: state.round, packed, pits, finalTo };
+  const events: AyoEvent[] = [{ type: 'ROUND_ENDED', round: state.round, packed, finalTo }];
+  state = { ...state, packed, lastRound };
+
+  if (pits[0] === 0 || pits[1] === 0) {
+    const done = finish(state, pits[0] === 0 ? 1 : 0, 'no_pits');
+    return { state: done.state, events: [...events, ...done.events] };
+  }
+  if (state.round >= AYO_MAX_ROUNDS) {
+    const done = finish(
+      state,
+      pits[0] === pits[1] ? 'draw' : pits[0] > pits[1] ? 0 : 1,
+      'max_rounds',
     );
     return { state: done.state, events: [...events, ...done.events] };
   }
-  const starter: AyoSeat = other(winner); // the loser of the round starts the next one
-  events.push({
-    type: 'ROUND_STARTED',
-    round: state.round + 1,
-    starter,
-    pits: setup.counts,
-  });
+
+  const starter = other(state.starter); // rounds alternate who starts
+  const onePit: AyoSeat | null = pits[0] === 1 ? 0 : pits[1] === 1 ? 1 : null;
+  steps.push({ k: 'round', round: state.round + 1, owners: ownersForPits(pits[0]) });
+  events.push({ type: 'ROUND_STARTED', round: state.round + 1, starter, pits });
+  if (onePit !== null) events.push({ type: 'DECISION_REQUIRED', seat: onePit });
   return {
     state: {
       ...state,
-      pits: setup.pits,
-      alive: setup.alive,
-      stores: setup.stores,
-      toMove: starter,
-      starter,
+      pits: Array.from({ length: AYO_PITS }, () => AYO_START_SEEDS),
+      owners: ownersForPits(pits[0]),
+      packed: [0, 0],
       round: state.round + 1,
-      endOffer: null,
-      lastRound,
+      roundTurns: 0,
+      lastPacker: null,
+      starter,
+      toMove: starter,
+      decision: onePit,
     },
     events,
   };
 }
 
-/** Plays a pit for `seat`: the whole turn, then rounds and the end of the match. */
-export function applyAyoMove(state: AyoState, seat: AyoSeat, pit: number): AyoResult {
+/**
+ * Plays a pit for `seat`: the whole turn (sowing, relays, packs), then the end of the round and the
+ * match when they come. `auto` marks a move the server played because the clock ran out.
+ */
+export function applyAyoMove(state: AyoState, seat: AyoSeat, pit: number, auto = false): AyoResult {
   if (state.phase === 'finished') return { ok: false, error: 'GAME_FINISHED' };
+  if (state.decision !== null) return { ok: false, error: 'DECISION_PENDING' };
   if (seat !== state.toMove) return { ok: false, error: 'NOT_YOUR_TURN' };
   if (!Number.isInteger(pit) || pit < 0 || pit >= AYO_PITS)
     return { ok: false, error: 'INVALID_PIT' };
   if (!legalAyoMoves(state).includes(pit)) return { ok: false, error: 'ILLEGAL_MOVE' };
 
-  const turn = sow(state, seat, pit);
-  const reaped: [number, number] = [
-    turn.stores[0] - state.stores[0],
-    turn.stores[1] - state.stores[1],
-  ];
-  const record: AyoMoveRecord = { seat, pit, steps: turn.steps };
-  const moved: AyoState = {
-    ...state,
-    pits: turn.pits,
-    stores: turn.stores,
-    toMove: other(seat),
-    plies: state.plies + 1,
-    last: record,
-    endOffer: null, // playing on answers an offer with "no"
+  const before: AyoBefore = {
+    pits: [...state.pits],
+    owners: [...state.owners],
+    packed: [state.packed[0], state.packed[1]],
   };
-  const events: AyoEvent[] = [{ type: 'MOVED', seat, pit, steps: turn.steps, reaped }];
-  if (state.endOffer !== null && state.endOffer !== seat) {
-    events.unshift({ type: 'END_DECLINED', seat });
-  }
+  const sow = sowAyo(state.pits, state.owners, seat, pit);
+  const steps = sow.steps;
+  const packed: [number, number] = [
+    state.packed[0] + sow.packedBy[0],
+    state.packed[1] + sow.packedBy[1],
+  ];
+  const autoPlays: [number, number] = [state.autoPlays[0], state.autoPlays[1]];
+  if (!auto) autoPlays[seat] = 0; // a real move proves the player is here
+  let moved: AyoState = {
+    ...state,
+    pits: sow.pits,
+    packed,
+    lastPacker: sow.lastReceiver ?? state.lastPacker,
+    roundTurns: state.roundTurns + 1,
+    plies: state.plies + 1,
+    autoPlays,
+    last: { seat, pit, steps, before },
+  };
+  const events: AyoEvent[] = [
+    { type: 'MOVED', seat, pit, steps, packed: [sow.packedBy[0], sow.packedBy[1]] },
+  ];
 
-  if (turn.roundWinner !== null) {
-    const closed = closeRound(moved, turn.roundWinner, turn.took, turn.stores);
-    return { ok: true, state: closed.state, events: [...events, ...closed.events] };
+  const left = sum(moved.pits);
+  let closing: { state: AyoState; events: AyoEvent[] } | null = null;
+  if (left <= 4 || moved.roundTurns >= AYO_MAX_ROUND_TURNS) {
+    closing = endRound(moved, steps);
+  } else {
+    const next = other(seat);
+    // A player with no seeds on their side skips their turn.
+    if (pitsWithSeeds(moved, next).length > 0) moved = { ...moved, toMove: next };
+    else if (pitsWithSeeds(moved, seat).length > 0) moved = { ...moved, toMove: seat };
+    else closing = endRound(moved, steps);
   }
-  // The next player has nothing to lift: the round ends and the mover takes what is left.
-  if (legalAyoMoves(moved).length === 0) {
-    const left = sum(turn.pits);
-    const stores: [number, number] = [turn.stores[0], turn.stores[1]];
-    stores[seat] += left;
-    const cleared: AyoState = { ...moved, pits: Array.from({ length: AYO_PITS }, () => 0), stores };
-    const closed = closeRound(cleared, seat, left, stores);
-    return { ok: true, state: closed.state, events: [...events, ...closed.events] };
+  if (closing !== null) {
+    moved = { ...closing.state, last: { seat, pit, steps, before } };
+    events.push(...closing.events);
   }
   return { ok: true, state: moved, events };
 }
 
-/** Either player may offer to end the game by agreement once they have exactly two pits. */
-export function offerAyoEnd(state: AyoState, seat: AyoSeat): AyoResult {
+/** The player who has to choose quits (and loses) or continues. */
+export function decideAyo(state: AyoState, seat: AyoSeat, quit: boolean): AyoResult {
   if (state.phase === 'finished') return { ok: false, error: 'GAME_FINISHED' };
-  if (livePits(state, 0) !== 2 && livePits(state, 1) !== 2) {
-    return { ok: false, error: 'END_NOT_ALLOWED' };
+  if (state.decision === null || state.decision !== seat)
+    return { ok: false, error: 'NO_DECISION' };
+  const events: AyoEvent[] = [{ type: 'DECIDED', seat, quit }];
+  if (quit) {
+    const done = finish({ ...state, decision: null }, other(seat), 'quit');
+    return { ok: true, state: done.state, events: [...events, ...done.events] };
   }
-  if (state.endOffer === seat) return { ok: true, state, events: [] }; // asking twice is one ask
-  if (state.endOffer !== null) return acceptAyoEnd(state, seat);
-  return {
-    ok: true,
-    state: { ...state, endOffer: seat },
-    events: [{ type: 'END_OFFERED', seat }],
-  };
-}
-
-/** The other player accepts: the match ends and the bigger total (store plus own side) wins. */
-export function acceptAyoEnd(state: AyoState, seat: AyoSeat): AyoResult {
-  if (state.phase === 'finished') return { ok: false, error: 'GAME_FINISHED' };
-  if (state.endOffer === null) return { ok: false, error: 'NO_OFFER' };
-  if (state.endOffer === seat) return { ok: false, error: 'OWN_OFFER' };
-  const mine = seedsOf(state, 0);
-  const theirs = seedsOf(state, 1);
-  const winner: AyoSeat | 'draw' = mine === theirs ? 'draw' : mine > theirs ? 0 : 1;
-  const done = finishMatch(state, winner, 'agreement');
-  return { ok: true, state: done.state, events: done.events };
-}
-
-export function declineAyoEnd(state: AyoState, seat: AyoSeat): AyoResult {
-  if (state.phase === 'finished') return { ok: false, error: 'GAME_FINISHED' };
-  if (state.endOffer === null) return { ok: false, error: 'NO_OFFER' };
-  if (state.endOffer === seat) return { ok: false, error: 'OWN_OFFER' };
-  return {
-    ok: true,
-    state: { ...state, endOffer: null },
-    events: [{ type: 'END_DECLINED', seat }],
-  };
-}
-
-/** The player on turn ran out of time and loses the match. */
-export function timeoutAyo(state: AyoState): AyoResult {
-  if (state.phase === 'finished') return { ok: false, error: 'GAME_FINISHED' };
-  const done = finishMatch(state, other(state.toMove), 'timeout');
-  return { ok: true, state: done.state, events: done.events };
+  return { ok: true, state: { ...state, decision: null }, events };
 }
 
 /** `seat` leaves or is dropped; the other seat wins. */
 export function forfeitAyo(state: AyoState, seat: AyoSeat): AyoResult {
   if (state.phase === 'finished') return { ok: false, error: 'GAME_FINISHED' };
-  const done = finishMatch(state, other(seat), 'forfeit');
+  const done = finish(state, other(seat), 'forfeit');
   return { ok: true, state: done.state, events: done.events };
+}
+
+/** The seat the clock is waiting for: the one that must choose, else the one to move. */
+export const seatOnClock = (state: AyoState): AyoSeat => state.decision ?? state.toMove;
+
+/**
+ * The clock of the seat on turn ran out. The server plays for them: it continues if a choice was
+ * waiting, otherwise it plays the pit `pick` gives. After AYO_MAX_AUTO_PLAYS turns in a row the
+ * player forfeits, so the server never plays a whole match for someone who is not there.
+ */
+export function idleAyo(state: AyoState, pick: (state: AyoState) => number | null): AyoResult {
+  if (state.phase === 'finished') return { ok: false, error: 'GAME_FINISHED' };
+  const seat = seatOnClock(state);
+  const autoPlays: [number, number] = [state.autoPlays[0], state.autoPlays[1]];
+  autoPlays[seat] += 1;
+  const counted: AyoState = { ...state, autoPlays };
+  if (autoPlays[seat] >= AYO_MAX_AUTO_PLAYS) {
+    const done = finish(counted, other(seat), 'timeout');
+    return { ok: true, state: done.state, events: [{ type: 'AUTO_PLAYED', seat }, ...done.events] };
+  }
+  if (counted.decision !== null) {
+    const result = decideAyo(counted, seat, false);
+    return result.ok
+      ? { ok: true, state: result.state, events: [{ type: 'AUTO_PLAYED', seat }, ...result.events] }
+      : result;
+  }
+  const chosen = pick(counted);
+  if (chosen === null) return { ok: false, error: 'ILLEGAL_MOVE' };
+  const result = applyAyoMove(counted, seat, chosen, true);
+  return result.ok
+    ? { ok: true, state: result.state, events: [{ type: 'AUTO_PLAYED', seat }, ...result.events] }
+    : result;
+}
+
+/** Checks the conservation laws; returns the problems found (empty when the state is sound). */
+export function checkAyoInvariants(state: AyoState): string[] {
+  const problems: string[] = [];
+  if (state.pits.length !== AYO_PITS || state.owners.length !== AYO_PITS) {
+    problems.push('wrong number of pits');
+  }
+  if (state.pits.some((count) => !Number.isInteger(count) || count < 0)) {
+    problems.push('a pit holds a bad count');
+  }
+  if (state.phase === 'playing' && sum(state.pits) + sum(state.packed) !== AYO_TOTAL_SEEDS) {
+    problems.push(`seeds are not conserved (${String(sum(state.pits) + sum(state.packed))})`);
+  }
+  return problems;
 }

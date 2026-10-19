@@ -1,5 +1,5 @@
 import { HttpStatus } from '@nestjs/common';
-import { ErrorCode } from '@gameverse/shared-types';
+import { DISCONNECT_GRACE_MS, ErrorCode } from '@gameverse/shared-types';
 import { AppException } from '../common/app.exception.js';
 import type { Prisma } from '../generated/prisma/client.js';
 import type { AnySeat, Change, EventDraft } from './match-changes.js';
@@ -20,7 +20,7 @@ export type DriverAction =
   | { kind: 'resume' }
   | { kind: 'draughts'; from: number; path: number[] }
   | { kind: 'ayo'; pit: number }
-  | { kind: 'ayo-end'; action: 'offer' | 'accept' | 'decline' };
+  | { kind: 'ayo-decision'; quit: boolean };
 
 /** What starting a match produces: the first state, its opening events and the first turn clock. */
 export interface StartResult {
@@ -43,6 +43,8 @@ export interface GameDriver {
   readonly gameId: string;
   /** Length of one turn clock; the bots' "thinking" delay is measured from its start. */
   readonly turnTimerMs: number;
+  /** How long a disconnected player has to come back; the default is DISCONNECT_GRACE_MS. */
+  readonly disconnectGraceMs?: number;
   /** Set when the game is always played with exactly this many seats. */
   readonly fixedPlayerCount?: number;
   /** First state of a match whose seats are all ready. */
@@ -71,6 +73,11 @@ export interface GameDriver {
 }
 
 const DRIVERS: readonly GameDriver[] = [ticTacToeDriver, ludoDriver, draughtsDriver, ayoDriver];
+
+/** How long a disconnected player of this game has to come back before they lose. */
+export function disconnectGraceFor(gameId: string): number {
+  return findDriver(gameId)?.disconnectGraceMs ?? DISCONNECT_GRACE_MS;
+}
 
 /** The driver for a game, or null when the server cannot run it. */
 export function findDriver(gameId: string): GameDriver | null {

@@ -1,4 +1,6 @@
-# Ayo: RRYDA rules compared with ours (for owner approval, slice 8E)
+# Ayo: RRYDA rules compared with ours (history: all nine points were then adopted, decision #118)
+
+> **Update 2026-10-19:** the owner asked for the exact RRYDA flow, so the Ayo rules were rewritten to RRYDA's (points 1 to 8) and the replay timings are RRYDA's. Only point 9 (three bot levels) stays ours. See `docs/ayo-rules.md`. The text below is the comparison as it was when I wrote it.
 
 You said both Ayo versions have the same rules. Reading the RRYDA code (`backend/src/games/ayo.rules.ts`, "Rryda house rules") against our approved rules (`docs/ayo-rules.md`, decision #109), they agree on the basics but differ in seven places. No Ayo code changes until you pick.
 

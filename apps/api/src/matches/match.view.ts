@@ -1,5 +1,4 @@
 import {
-  DISCONNECT_GRACE_MS,
   type BotLevelName,
   type PlayerSeat,
   type MatchPlayerView,
@@ -19,6 +18,7 @@ import { settlementOf } from './settlement.js';
 import { seriesOf } from './tictactoe.driver.js';
 import { draughtsOf, toDraughtsView } from './draughts.driver.js';
 import { ayoOf, toAyoView } from './ayo.driver.js';
+import { disconnectGraceFor } from './game-driver.js';
 
 export type MatchRecord = GameMatch & {
   players: GameMatchPlayer[];
@@ -55,7 +55,11 @@ function toSeriesView(series: SeriesState): MatchSeriesView {
   };
 }
 
-function toPlayerView(player: GameMatchPlayer, profiles: ProfileLookup): MatchPlayerView {
+function toPlayerView(
+  player: GameMatchPlayer,
+  profiles: ProfileLookup,
+  graceMs: number,
+): MatchPlayerView {
   const seat = player.seat as PlayerSeat;
   if (player.userId === null) {
     return {
@@ -83,7 +87,7 @@ function toPlayerView(player: GameMatchPlayer, profiles: ProfileLookup): MatchPl
     reconnectBy:
       player.disconnectedAt === null
         ? null
-        : new Date(player.disconnectedAt.getTime() + DISCONNECT_GRACE_MS).toISOString(),
+        : new Date(player.disconnectedAt.getTime() + graceMs).toISOString(),
   };
 }
 
@@ -121,7 +125,7 @@ export function toMatchView(
     mySeat: viewerSeat,
     players: [...match.players]
       .sort((a, b) => a.seat - b.seat)
-      .map((player) => toPlayerView(player, profiles)),
+      .map((player) => toPlayerView(player, profiles, disconnectGraceFor(match.gameId))),
     series: series === null ? null : toSeriesView(series),
     ludo: ludo === null ? null : toLudoView(ludo),
     draughts: draughts === null ? null : toDraughtsView(draughts),

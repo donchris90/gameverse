@@ -152,15 +152,10 @@ export const games = {
     request<MatchView>('POST', matchPath(id, 'ayo-moves'), {
       body: { pit, clientActionId, expectedVersion },
     }),
-  /** Ayo: offer to end the game by agreement, or answer an offer. */
-  endAyo: (
-    id: string,
-    action: 'offer' | 'accept' | 'decline',
-    clientActionId: string,
-    expectedVersion: number,
-  ) =>
-    request<MatchView>('POST', matchPath(id, 'ayo-end'), {
-      body: { action, clientActionId, expectedVersion },
+  /** Ayo: the player who started a round with one pit chooses to quit or continue. */
+  decideAyo: (id: string, quit: boolean, clientActionId: string, expectedVersion: number) =>
+    request<MatchView>('POST', matchPath(id, 'ayo-decision'), {
+      body: { quit, clientActionId, expectedVersion },
     }),
   leave: (id: string) => request<MatchView>('POST', matchPath(id, 'leave'), { body: {} }),
   rematch: (id: string) => request<MatchView>('POST', matchPath(id, 'rematch'), { body: {} }),

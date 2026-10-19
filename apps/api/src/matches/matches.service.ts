@@ -1,8 +1,7 @@
 import { HttpStatus, Injectable, type OnModuleInit } from '@nestjs/common';
 import {
-  DISCONNECT_GRACE_MS,
   ErrorCode,
-  type AyoEndRequest,
+  type AyoDecisionRequest,
   type AyoMoveRequest,
   type BotLevelName,
   type DraughtsMoveRequest,
@@ -23,7 +22,7 @@ import { RealtimeHub } from '../realtime/realtime.hub.js';
 import { isBlockedEitherWay } from '../social/relationships.js';
 import { runOptimistic, runSerializable, type Tx } from '../social/serializable.js';
 import { ActionLimiter } from './action-limiter.js';
-import { driverFor, findDriver, type DriverAction } from './game-driver.js';
+import { disconnectGraceFor, driverFor, findDriver, type DriverAction } from './game-driver.js';
 import {
   BOT_THINK_MS,
   ACTION_LIMIT,
@@ -403,9 +402,13 @@ export class MatchesService implements OnModuleInit {
     return this.act(userId, matchId, request, { kind: 'ayo', pit: request.pit });
   }
 
-  /** Ayo: offer to end the game by agreement, or answer an offer. */
-  async endAyo(userId: string, matchId: string, request: AyoEndRequest): Promise<MatchView> {
-    return this.act(userId, matchId, request, { kind: 'ayo-end', action: request.action });
+  /** Ayo: the player who started a round with one pit chooses to quit or continue. */
+  async decideAyo(
+    userId: string,
+    matchId: string,
+    request: AyoDecisionRequest,
+  ): Promise<MatchView> {
+    return this.act(userId, matchId, request, { kind: 'ayo-decision', quit: request.quit });
   }
 
   /** Ludo: the server rolls the die for the player on turn. The phone sends no number. */
@@ -676,7 +679,9 @@ export class MatchesService implements OnModuleInit {
           }
         }
         const overdue = gone
-          .filter((entry) => now.getTime() - entry.since.getTime() >= DISCONNECT_GRACE_MS)
+          .filter(
+            (entry) => now.getTime() - entry.since.getTime() >= disconnectGraceFor(match.gameId),
+          )
           .sort((a, b) => a.since.getTime() - b.since.getTime() || a.seat - b.seat);
         // Every overdue seat is dealt with: a game (Ludo) can lose or cover more than one.
         let acted = false;
@@ -704,7 +709,7 @@ export class MatchesService implements OnModuleInit {
       if (
         !player ||
         player.disconnectedAt === null ||
-        now.getTime() - player.disconnectedAt.getTime() < DISCONNECT_GRACE_MS
+        now.getTime() - player.disconnectedAt.getTime() < disconnectGraceFor(current.gameId)
       ) {
         return { changed: false };
       }

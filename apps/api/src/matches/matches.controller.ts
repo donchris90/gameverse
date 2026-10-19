@@ -10,7 +10,7 @@ import {
 } from '@nestjs/common';
 import {
   type MatchView,
-  ayoEndSchema,
+  ayoDecisionSchema,
   ayoMoveSchema,
   botMatchSchema,
   draughtsMoveSchema,
@@ -130,15 +130,15 @@ export class MatchesController {
     return this.matches.moveAyo(user.id, id, body);
   }
 
-  /** Ayo: offer to end by agreement, accept, or decline. */
-  @Post(':id/ayo-end')
+  /** Ayo: the player with one pit chooses to quit or continue. */
+  @Post(':id/ayo-decision')
   @HttpCode(HttpStatus.OK)
-  endAyo(
+  decideAyo(
     @CurrentUser() user: AuthUser,
     @idParam() id: string,
-    @Body(new ZodValidationPipe(ayoEndSchema)) body: z.output<typeof ayoEndSchema>,
+    @Body(new ZodValidationPipe(ayoDecisionSchema)) body: z.output<typeof ayoDecisionSchema>,
   ): Promise<MatchView> {
-    return this.matches.endAyo(user.id, id, body);
+    return this.matches.decideAyo(user.id, id, body);
   }
 
   @Post(':id/leave')
