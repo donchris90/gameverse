@@ -16,6 +16,7 @@
     "@notifee/react-native": "9.1.8",
     "@sentry/react-native": "^8.31.0",
     "expo": "58.0.14",
+    "expo-audio": "~58.0.9",
     "expo-constants": "~58.0.12",
     "expo-crypto": "~58.0.7",
     "expo-dev-client": "~58.0.14",

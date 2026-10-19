@@ -25,6 +25,9 @@ import { ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-n
 import { chat, games } from '../api-client';
 import { ApiError } from '../http';
 import { useReduceMotion } from '../ludo/motion';
+import { MatchSounds } from '../MatchSounds';
+import { ayoStepSound } from '@gameverse/shared-types';
+import { playSound } from '../sounds';
 import { Body, Button, ErrorText, Title, useAction } from '../ui';
 import { VoicePanel } from '../VoicePanel';
 import { AyoTable } from './AyoTable';
@@ -121,6 +124,7 @@ export function AyoMatch({
             trail: frame.trail,
             note: noteFor(frame.kind, by, amount, frame.round),
           });
+          playSound(ayoStepSound(frame.kind));
           if (frame.kind === 'pack') tap(Haptics.ImpactFeedbackStyle.Medium);
           await new Promise<void>((resolve) => setTimeout(resolve, frame.ms));
         }
@@ -226,6 +230,7 @@ export function AyoMatch({
 
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
+      <MatchSounds match={match} />
       <Title>{match.kind === 'BOT' ? 'Practice match' : 'Ayo'}</Title>
 
       <View style={styles.legend} accessibilityLabel="Players">

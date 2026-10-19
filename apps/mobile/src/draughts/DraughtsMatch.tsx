@@ -18,6 +18,7 @@ import {
   type MatchView,
 } from '@gameverse/shared-types';
 import * as Crypto from 'expo-crypto';
+import { MatchSounds } from '../MatchSounds';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
@@ -211,6 +212,7 @@ export function DraughtsMatch({
 
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
+      <MatchSounds match={match} />
       <Title>{match.kind === 'BOT' ? 'Practice match' : 'Draughts'}</Title>
 
       <View style={styles.legend} accessibilityLabel="Players">

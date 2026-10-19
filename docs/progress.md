@@ -525,3 +525,10 @@ Real results: `pnpm exec turbo run lint typecheck build test --env-mode=loose --
 Not done: the other tabs and screens keep the dark look (no full light re-theme); no new RRYDA sound effects or animations.
 
 - Gate `PRISMA_SCHEMA_ENGINE_BINARY=/bin/true pnpm exec turbo run lint typecheck build test --env-mode=loose --continue` → Tasks: 22 successful, 22 total. `cd packages/design-system && pnpm exec vitest run` → 1 file, 40 tests passed. `npx prettier --check .` → all formatted. API unchanged since the last full integration run (35 files, 656 tests).
+
+## Slice 9E: Game sounds (owner 2026-10-19; decision #122; NOT heard on a phone)
+
+Added: `expo-audio` dependency, `apps/mobile/scripts/make-sounds.mjs` + 12 WAV files, `src/sounds.ts` (player and Settings preference), `src/use-match-sounds.ts`, `src/MatchSounds.tsx` (rendered by all four match screens), Settings "Game sounds" On/Off, `shared-types/src/sounds.ts` + `sounds.spec.ts` (3 tests). Sounds: tic-tac-toe mark; Ludo roll, move, capture, home; draughts move and capture; Ayo lift, drop, pack per replay step; a ping when it becomes your turn (not in Ayo, whose clock starts after the replay); win, lose and draw at the end of a match opened live.
+Real results: `pnpm exec turbo run lint typecheck test --env-mode=loose --continue` → Tasks: 20 successful, 20 total; `npx expo export --platform android` → bundled (7.6 MB), sound files resolved. Not done: no draughts king sound; no sound for button taps or chat.
+Unverified (cannot be checked without a phone): that the sounds play, how they sound and how loud, mixing with voice chat. The synthesised sounds are simple tones and may need tuning. Owner action: `pnpm install`, then make a **new dev build** (expo-audio is native), then pull.
+- Final gate after the sounds slice: Tasks: 22 successful, 22 total; prettier clean.

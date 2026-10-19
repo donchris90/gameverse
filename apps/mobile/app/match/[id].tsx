@@ -24,6 +24,7 @@ import { AyoMatch } from '../../src/ayo/AyoMatch';
 import { DraughtsMatch } from '../../src/draughts/DraughtsMatch';
 import { LudoMatch } from '../../src/ludo/LudoMatch';
 import { VoicePanel } from '../../src/VoicePanel';
+import { MatchSounds } from '../../src/MatchSounds';
 import { useAction, Body, Button, ErrorText, Loading, Title } from '../../src/ui';
 import { useMatch } from '../../src/use-match';
 
@@ -117,6 +118,7 @@ export default function MatchScreen() {
 
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
+      <MatchSounds match={match} />
       <Title>{match.kind === 'BOT' ? 'Practice match' : 'Tic-tac-toe'}</Title>
       <Text style={styles.versus}>
         You{mark ? ` (${mark})` : ''} vs {displayName(opponent)}

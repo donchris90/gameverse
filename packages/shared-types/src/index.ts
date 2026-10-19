@@ -22,3 +22,4 @@ export * from './draughts-ui.js';
 export * from './ayo-ui.js';
 export * from './wallet.js';
 export * from './wallet-ui.js';
+export * from './sounds.js';

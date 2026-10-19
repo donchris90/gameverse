@@ -11,6 +11,7 @@ import { Pressable, ScrollView, Text, View } from 'react-native';
 import { accountApi, me } from '../../src/api-client';
 import { LegalLinks } from '../../src/LegalLinks';
 import { setReduceMotionChoice, useReduceMotion } from '../../src/ludo/motion';
+import { setSoundEnabled, useSoundEnabled } from '../../src/sounds';
 import { registerForPush, type PushRegistration } from '../../src/push';
 import { useReadySession, useSession } from '../../src/session';
 import { Avatar, Body, Button, ErrorText, Loading, Screen, useAction, useLoad } from '../../src/ui';
@@ -21,6 +22,8 @@ const LABELS: Record<string, string> = {
   NOBODY: 'Nobody',
   AUTO: 'Follow phone',
   FULL: 'Full',
+  ON: 'On',
+  OFF: 'Off',
   REDUCED: 'Reduced',
 };
 
@@ -77,6 +80,7 @@ export default function Settings() {
   const { signOut } = useSession();
   const router = useRouter();
   const motion = useReduceMotion();
+  const soundOn = useSoundEnabled();
   const load = useCallback(() => me.settings(), []);
   const { data: settings, setData, error, loading } = useLoad(load);
   const save = useAction();
@@ -173,6 +177,14 @@ export default function Settings() {
               onChange={(value) =>
                 void setReduceMotionChoice(value === 'AUTO' ? null : value === 'REDUCED')
               }
+              disabled={false}
+            />
+            <Choice
+              title="Game sounds"
+              hint="Short sound effects for moves, dice and results. They follow your phone's silent switch."
+              options={['ON', 'OFF'] as const}
+              value={soundOn ? 'ON' : 'OFF'}
+              onChange={(value) => void setSoundEnabled(value === 'ON')}
               disabled={false}
             />
             <Choice
