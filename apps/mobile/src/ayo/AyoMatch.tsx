@@ -2,10 +2,8 @@ import { theme } from '@gameverse/design-system';
 import {
   ayoEndControl,
   ayoMovable,
-  ayoOwnPits,
-  ayoReplayFrames,
+  ayoReplayTimeline,
   ayoRoundNote,
-  ayoRows,
   ayoStatus,
   canPressReady,
   displayName,
@@ -20,12 +18,14 @@ import * as Crypto from 'expo-crypto';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { chat, games } from '../api-client';
 import { ApiError } from '../http';
 import { useReduceMotion } from '../ludo/motion';
 import { Body, Button, ErrorText, Title, useAction } from '../ui';
 import { VoicePanel } from '../VoicePanel';
+import { AyoTable } from './AyoTable';
+import { AYO } from './theme';
 
 const c = theme.colors;
 const s = theme.spacing;
@@ -36,15 +36,6 @@ const TONE_COLOR = {
   bad: c.danger,
   warn: c.warning,
 } as const;
-
-// Fixed so the two sides can always be told apart, whatever the app theme is.
-const WOOD = '#6B4A2B';
-const WOOD_DARK = '#3E2A16';
-const PIT = '#2B1B0D';
-const SEED = '#F4EBD9';
-const MINE = '#3F7D4E';
-const THEIRS = '#B3261E';
-const FRAME_MS = 140;
 
 function tap(style: Haptics.ImpactFeedbackStyle) {
   // Haptics are a nicety; a phone without them must not break the game.
@@ -68,47 +59,64 @@ export function AyoMatch({
   const { width } = useWindowDimensions();
   const { reduced } = useReduceMotion();
   const pending = useRef<{ key: string; version: number; id: string } | null>(null);
-  const previous = useRef<{ version: number; pits: number[] } | null>(null);
-  const [replay, setReplay] = useState<{ pits: number[]; focus: number } | null>(null);
+  const previous = useRef<{ version: number; pits: number[]; stores: [number, number] } | null>(
+    null,
+  );
+  const [replay, setReplay] = useState<{
+    pits: number[];
+    stores: [number, number];
+    focus: number;
+    hand: number;
+    trail: number[];
+  } | null>(null);
 
   const game = match.ayo;
 
-  // Replay the last turn seed by seed, then settle on the real board.
+  // Replay the last turn seed by seed (lift, drop, reap), then settle on the real board.
   useEffect(() => {
     if (!game) return;
     const before = previous.current;
-    previous.current = { version: match.version, pits: [...game.pits] };
+    previous.current = { version: match.version, pits: [...game.pits], stores: [...game.stores] };
     if (reduced || !before || before.version >= match.version || !game.last) {
       setReplay(null);
       return;
     }
     const steps = game.last.steps;
-    if (steps.length > 220) {
+    if (steps.length > 400) {
       setReplay(null);
       return;
     }
-    const frames = ayoReplayFrames(before.pits, steps);
+    const frames = ayoReplayTimeline(before.pits, before.stores, steps);
     let index = 0;
-    setReplay({ pits: frames[0] ?? before.pits, focus: steps[0]?.pit ?? -1 });
-    const timer = setInterval(() => {
-      index += 1;
-      if (index >= frames.length) {
-        clearInterval(timer);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const show = () => {
+      const frame = frames[index];
+      if (!frame) {
         setReplay(null);
         return;
       }
-      setReplay({ pits: frames[index] as number[], focus: steps[index]?.pit ?? -1 });
-    }, FRAME_MS);
-    return () => clearInterval(timer);
+      setReplay({
+        pits: frame.pits,
+        stores: frame.stores,
+        focus: frame.focus,
+        hand: frame.hand,
+        trail: frame.trail,
+      });
+      if (frame.kind === 'reap') tap(Haptics.ImpactFeedbackStyle.Medium);
+      index += 1;
+      timer = setTimeout(show, frame.ms);
+    };
+    show();
+    return () => {
+      if (timer !== undefined) clearTimeout(timer);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [match.version]);
 
   const status = ayoStatus(match, deadlineSeconds);
   const movable = new Set(ayoMovable(match));
-  const own = new Set(ayoOwnPits(match.mySeat));
-  const rows = ayoRows(match.mySeat);
   const shown = replay?.pits ?? game?.pits ?? [];
-  const pitSize = Math.min((width - s.lg * 2 - 6 * 6) / 6, 64);
+  const shownStores = replay?.stores ?? game?.stores ?? [0, 0];
   const note = ayoRoundNote(match);
   const endControl = ayoEndControl(match);
   const lines = resultLines(match);
@@ -156,39 +164,6 @@ export function AyoMatch({
       router.push({ pathname: '/chat/[id]', params: { id: conversation.id } });
     });
 
-  const renderPit = (pit: number) => {
-    const alive = game?.alive[pit] ?? false;
-    const count = shown[pit] ?? 0;
-    const canTap = movable.has(pit) && !replay;
-    const theirs = !own.has(pit);
-    return (
-      <Pressable
-        key={pit}
-        disabled={!canTap}
-        onPress={() => onPit(pit)}
-        accessibilityRole="button"
-        accessibilityLabel={
-          alive
-            ? `${own.has(pit) ? 'Your' : 'Their'} pit ${String(pit + 1)}, ${String(count)} seeds${
-                canTap ? ', tap to play' : ''
-              }`
-            : `Pit ${String(pit + 1)}, out of the game`
-        }
-        accessibilityState={{ disabled: !canTap }}
-        style={[
-          styles.pit,
-          { width: pitSize, height: pitSize, borderRadius: pitSize / 2 },
-          !alive && styles.dead,
-          alive && { borderColor: theirs ? THEIRS : MINE },
-          canTap && styles.canTap,
-          replay?.focus === pit && styles.focus,
-        ]}
-      >
-        {alive ? <Text style={[styles.count, count === 0 && styles.zero]}>{count}</Text> : null}
-      </Pressable>
-    );
-  };
-
   if (!game) {
     return (
       <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
@@ -234,7 +209,7 @@ export function AyoMatch({
               key={seat}
               style={[styles.chip, game.toMove === seat && { borderColor: c.success }]}
               accessibilityLabel={`${seat === meSeat ? 'You' : player ? displayName(player) : 'Opponent'}, ${String(
-                game.stores[seat] ?? 0,
+                shownStores[seat] ?? 0,
               )} seeds reaped${game.toMove === seat ? ', their move' : ''}`}
             >
               <View style={styles.flex}>
@@ -242,7 +217,7 @@ export function AyoMatch({
                   {seat === meSeat ? 'You' : player ? displayName(player) : 'Opponent'}
                 </Text>
                 <Text style={styles.chipMeta}>
-                  {String(game.stores[seat] ?? 0)} reaped · {String(game.totals[seat] ?? 0)} in all
+                  {String(shownStores[seat] ?? 0)} reaped · {String(game.totals[seat] ?? 0)} in all
                 </Text>
               </View>
             </View>
@@ -250,7 +225,6 @@ export function AyoMatch({
         })}
       </View>
 
-      <Text style={styles.round}>Round {game.round}</Text>
       {coinLine && match.status !== 'COMPLETED' ? <Body muted>{coinLine}</Body> : null}
       {note ? <Body muted>{note}</Body> : null}
       <View accessibilityLiveRegion="polite">
@@ -258,12 +232,25 @@ export function AyoMatch({
         {status.detail ? <Body muted>{status.detail}</Body> : null}
       </View>
 
-      <View style={styles.board} accessibilityLabel="Ayo board">
-        <Text style={styles.sideLabel}>{opponent ? displayName(opponent) : 'Opponent'}</Text>
-        <View style={styles.row}>{rows.top.map(renderPit)}</View>
-        <View style={styles.row}>{rows.bottom.map(renderPit)}</View>
-        <Text style={styles.sideLabel}>You</Text>
-      </View>
+      {replay ? (
+        <Text style={styles.hand} accessibilityLiveRegion="polite">
+          {replay.hand > 0 ? `Sowing · ${String(replay.hand)} in hand` : 'Sowing…'}
+        </Text>
+      ) : null}
+
+      <AyoTable
+        mySeat={match.mySeat}
+        pits={shown}
+        alive={game.alive}
+        movable={movable}
+        hot={replay ? replay.focus : null}
+        trail={replay?.trail ?? []}
+        replaying={replay !== null}
+        width={Math.min(width - s.lg * 2, 420)}
+        opponentName={opponent ? displayName(opponent) : 'Opponent'}
+        roundLabel={`ROUND ${String(game.round)}`}
+        onPit={onPit}
+      />
 
       {endControl === 'offer' ? (
         <Button
@@ -354,7 +341,7 @@ export function AyoMatch({
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: c.background },
+  screen: { flex: 1, backgroundColor: AYO.bg },
   content: { padding: s.lg, paddingBottom: s.xxl },
   flex: { flex: 1 },
   legend: { flexDirection: 'row', gap: s.sm, marginBottom: s.sm },
@@ -365,41 +352,19 @@ const styles = StyleSheet.create({
     padding: s.sm,
     borderRadius: theme.radii.sm,
     borderWidth: 2,
-    borderColor: c.border,
-    backgroundColor: c.surface,
+    borderColor: AYO.border,
+    backgroundColor: AYO.surface,
   },
-  chipName: { color: c.textPrimary, fontSize: 15, fontWeight: '600' },
-  chipMeta: { color: c.textSecondary, fontSize: 13 },
-  round: { color: c.textSecondary, fontSize: 14, marginBottom: s.xs },
+  chipName: { color: AYO.text, fontSize: 15, fontWeight: '700' },
+  chipMeta: { color: AYO.muted, fontSize: 13 },
+  hand: {
+    color: AYO.gold,
+    fontSize: 13,
+    fontWeight: '900',
+    textAlign: 'center',
+    letterSpacing: 0.6,
+  },
   headline: { fontSize: 20, fontWeight: '700', marginBottom: s.xs },
-  board: {
-    backgroundColor: WOOD,
-    borderWidth: 3,
-    borderColor: WOOD_DARK,
-    borderRadius: 12,
-    padding: s.sm,
-    marginVertical: s.md,
-    gap: 6,
-  },
-  sideLabel: { color: SEED, fontSize: 13, textAlign: 'center' },
-  row: { flexDirection: 'row', justifyContent: 'space-between' },
-  pit: {
-    backgroundColor: PIT,
-    borderWidth: 3,
-    borderColor: WOOD_DARK,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  dead: {
-    backgroundColor: 'transparent',
-    borderStyle: 'dashed',
-    borderColor: '#8A6A3D',
-    opacity: 0.45,
-  },
-  canTap: { borderColor: '#9BE3AE', backgroundColor: '#1F3A26' },
-  focus: { backgroundColor: '#5B3D1B' },
-  count: { color: SEED, fontSize: 22, fontWeight: '800' },
-  zero: { opacity: 0.35 },
   offer: { gap: s.sm, marginBottom: s.md },
   result: { marginBottom: s.md },
 });

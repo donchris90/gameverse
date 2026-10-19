@@ -57,6 +57,89 @@ export function ayoReplayFrames(
   return frames;
 }
 
+/**
+ * The upright board: two columns of six bowls. My column is on the right and the ring runs up it
+ * (bottom to top), then down the opponent's column on the left, which is counter-clockwise.
+ * Each list is top to bottom.
+ */
+export function ayoColumns(mySeat: PlayerSeat): { left: number[]; right: number[] } {
+  return mySeat === 0
+    ? { right: [5, 4, 3, 2, 1, 0], left: [6, 7, 8, 9, 10, 11] }
+    : { right: [11, 10, 9, 8, 7, 6], left: [0, 1, 2, 3, 4, 5] };
+}
+
+/** How long each kind of step stays on screen while a turn is replayed (milliseconds). */
+export const AYO_REPLAY_MS = {
+  lift: 320,
+  drop: 220,
+  reap: 600,
+  reapAll: 800,
+  maxTurn: 9000,
+} as const;
+
+/** One picture of a replayed turn: the board, who has seeds in hand, and what just happened. */
+export interface AyoReplayFrame {
+  pits: number[];
+  stores: [number, number];
+  /** The pit the step is about (lit up on screen). */
+  focus: number;
+  /** Seeds still in the sower's hand after this step. */
+  hand: number;
+  /** Every pit a seed has been dropped into so far this turn. */
+  trail: number[];
+  kind: 'lift' | 'drop' | 'reap';
+  /** How long to show this frame. */
+  ms: number;
+}
+
+/**
+ * The turn as a list of frames with seeds in hand, a trail of pits already sown, the reaped totals
+ * and a time for each step. A long turn is sped up so it never takes more than `maxTurn` to drop.
+ */
+export function ayoReplayTimeline(
+  before: readonly number[],
+  storesBefore: readonly [number, number],
+  steps: readonly AyoStepView[],
+): AyoReplayFrame[] {
+  const drops = steps.filter((step) => step.k === 'drop').length;
+  const dropMs =
+    drops > 0
+      ? Math.min(AYO_REPLAY_MS.drop, Math.floor(AYO_REPLAY_MS.maxTurn / drops))
+      : AYO_REPLAY_MS.drop;
+  const board = [...before];
+  const stores: [number, number] = [storesBefore[0], storesBefore[1]];
+  const trail: number[] = [];
+  let hand = 0;
+  const frames: AyoReplayFrame[] = [];
+  for (const step of steps) {
+    let ms: number = dropMs;
+    if (step.k === 'lift') {
+      board[step.pit] = 0;
+      hand = step.count;
+      ms = AYO_REPLAY_MS.lift;
+    } else if (step.k === 'drop') {
+      board[step.pit] = (board[step.pit] ?? 0) + 1;
+      hand = Math.max(0, hand - 1);
+      if (!trail.includes(step.pit)) trail.push(step.pit);
+    } else {
+      if (step.all) board.fill(0);
+      else board[step.pit] = 0;
+      if (step.by === 0 || step.by === 1) stores[step.by] += step.amount;
+      ms = step.all ? AYO_REPLAY_MS.reapAll : AYO_REPLAY_MS.reap;
+    }
+    frames.push({
+      pits: [...board],
+      stores: [stores[0], stores[1]],
+      focus: step.pit,
+      hand,
+      trail: [...trail],
+      kind: step.k,
+      ms,
+    });
+  }
+  return frames;
+}
+
 /** The pit each frame of a replay is about (for highlighting), same length as the frames. */
 export function ayoReplayFocus(steps: readonly AyoStepView[]): number[] {
   return steps.map((step) => step.pit);

@@ -174,13 +174,15 @@ export type Theme = typeof theme;
  */
 export const ludoColors = {
   /** Playing squares of the shared track. */
-  track: '#EEF0FF',
+  track: '#FFFFFF',
   /** Outline of a square. */
-  trackLine: '#7A7FC4',
+  trackLine: '#CDD3E0',
   /** The marked star (safe) squares. */
-  star: '#2A2D6B',
+  star: '#7A8196',
   /** Board background behind the cross. */
-  boardBackground: '#15173A',
+  boardBackground: '#FFFFFF',
+  /** The dark frame around the board. */
+  frame: '#1A1538',
   /** Player colours by board colour index 0-3. */
   players: ['#E5484D', '#2EB67D', '#F5C518', '#3E8BFF'],
   /** Soft tints of the same colours for bases and home columns. */

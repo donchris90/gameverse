@@ -3,7 +3,9 @@ import {
   ayoCanMove,
   ayoEndControl,
   ayoMovable,
+  ayoColumns,
   ayoReaps,
+  ayoReplayTimeline,
   ayoReplayFrames,
   ayoRoundNote,
   ayoRows,
@@ -214,5 +216,76 @@ describe('ayoStatus and the round note', () => {
     expect(ayoRoundNote(match({}, { lastRound: { round: 2, winner: 1, took: 8 } }))).toBe(
       'Round 2: They took the last 8 seeds',
     );
+  });
+});
+
+describe('the upright board and the timed replay', () => {
+  it('puts my column on the right with the ring running up it', () => {
+    expect(ayoColumns(0)).toEqual({ right: [5, 4, 3, 2, 1, 0], left: [6, 7, 8, 9, 10, 11] });
+    expect(ayoColumns(1)).toEqual({ right: [11, 10, 9, 8, 7, 6], left: [0, 1, 2, 3, 4, 5] });
+    for (const seat of [0, 1] as const) {
+      const { left, right } = ayoColumns(seat);
+      expect([...left, ...right].sort((a, b) => a - b)).toEqual([
+        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,
+      ]);
+    }
+  });
+
+  it('counts seeds in hand, keeps a trail and adds reaped seeds to the right store', () => {
+    const frames = ayoReplayTimeline(
+      [2, 3, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      [4, 8],
+      [
+        { k: 'lift', pit: 0, count: 2 },
+        { k: 'drop', pit: 1 },
+        { k: 'drop', pit: 2 },
+        { k: 'reap', pit: 2, by: 1, amount: 4, all: false },
+      ],
+    );
+    expect(frames.map((f) => f.hand)).toEqual([2, 1, 0, 0]);
+    expect(frames.map((f) => f.kind)).toEqual(['lift', 'drop', 'drop', 'reap']);
+    expect(frames[2]?.trail).toEqual([1, 2]);
+    expect(frames[3]?.stores).toEqual([4, 12]);
+    expect(frames[3]?.pits[2]).toBe(0);
+    expect(frames.map((f) => f.ms)).toEqual([320, 220, 220, 600]);
+  });
+
+  it('refills the hand on a relay and speeds up a very long turn', () => {
+    const relay = ayoReplayTimeline(
+      [1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      [0, 0],
+      [
+        { k: 'lift', pit: 0, count: 1 },
+        { k: 'drop', pit: 1 },
+        { k: 'lift', pit: 1, count: 2 },
+        { k: 'drop', pit: 2 },
+        { k: 'drop', pit: 3 },
+      ],
+    );
+    expect(relay.map((f) => f.hand)).toEqual([1, 0, 2, 1, 0]);
+    const long = ayoReplayTimeline(
+      Array(12).fill(0),
+      [0, 0],
+      Array.from({ length: 90 }, () => ({ k: 'drop' as const, pit: 1 })),
+    );
+    expect(long[0]?.ms).toBe(100);
+    expect(long.reduce((sum, f) => sum + f.ms, 0)).toBeLessThanOrEqual(9000);
+  });
+
+  it('does not change the board it is given and clears everything on a final reap', () => {
+    const before = [1, 3, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    const frames = ayoReplayTimeline(
+      before,
+      [0, 0],
+      [
+        { k: 'lift', pit: 0, count: 1 },
+        { k: 'drop', pit: 1 },
+        { k: 'reap', pit: 1, by: 0, amount: 8, all: true },
+      ],
+    );
+    expect(before[0]).toBe(1);
+    expect(frames[2]?.pits).toEqual(Array(12).fill(0));
+    expect(frames[2]?.stores).toEqual([8, 0]);
+    expect(frames[2]?.ms).toBe(800);
   });
 });

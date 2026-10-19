@@ -1,4 +1,4 @@
-import { ludoColors, theme } from '@gameverse/design-system';
+import { ludoColors } from '@gameverse/design-system';
 import {
   LUDO_BOARD_SIZE,
   BASE_ORIGINS,
@@ -21,9 +21,10 @@ import Animated, {
   withSequence,
   withTiming,
 } from 'react-native-reanimated';
-import Svg, { Circle, Polygon, Rect } from 'react-native-svg';
+import Svg, { Circle, G, Polygon, Rect } from 'react-native-svg';
 
 const HOP_MS = 110;
+const FRAME = 6;
 const SETTLE_MS = 140;
 
 /** The five-point star drawn on a safe square, centred at (cx, cy). */
@@ -53,63 +54,65 @@ const StaticBoard = memo(function StaticBoard({
   const mid = cell * 7.5;
   return (
     <Svg width={size} height={size} accessibilityElementsHidden importantForAccessibility="no">
-      <Rect
-        x={0}
-        y={0}
-        width={size}
-        height={size}
-        rx={cell * 0.6}
-        fill={ludoColors.boardBackground}
-      />
-      {BASE_ORIGINS.map((origin, colour) => (
-        <Rect
-          key={`base-${String(colour)}`}
-          x={origin.col * cell + cell * 0.3}
-          y={origin.row * cell + cell * 0.3}
-          width={cell * 5.4}
-          height={cell * 5.4}
-          rx={cell * 0.8}
-          fill={ludoColors.tints[colour]}
-          opacity={activeColours.includes(colour) ? 1 : 0.28}
-        />
-      ))}
-      {BASE_ORIGINS.flatMap((_, colour) =>
-        [0, 1, 2, 3].map((token) => {
-          const slot = basePoint(colour, token);
-          return (
-            <Circle
-              key={`slot-${String(colour)}-${String(token)}`}
-              cx={slot.x * cell}
-              cy={slot.y * cell}
-              r={cell * 0.62}
-              fill={ludoColors.boardBackground}
-              opacity={activeColours.includes(colour) ? 0.55 : 0.2}
+      <Rect x={0} y={0} width={size} height={size} fill={ludoColors.boardBackground} />
+      {BASE_ORIGINS.map((origin, colour) => {
+        const active = activeColours.includes(colour);
+        const tone = ludoColors.players[colour];
+        return (
+          <G key={`base-${String(colour)}`} opacity={active ? 1 : 0.28}>
+            <Rect
+              x={origin.col * cell}
+              y={origin.row * cell}
+              width={cell * 6}
+              height={cell * 6}
+              fill={tone}
             />
-          );
-        }),
-      )}
+            <Rect
+              x={(origin.col + 1) * cell}
+              y={(origin.row + 1) * cell}
+              width={cell * 4}
+              height={cell * 4}
+              rx={cell * 0.8}
+              fill="#FFFFFF"
+              fillOpacity={0.93}
+            />
+            {[0, 1, 2, 3].map((token) => {
+              const slot = basePoint(colour, token);
+              return (
+                <Circle
+                  key={`slot-${String(colour)}-${String(token)}`}
+                  cx={slot.x * cell}
+                  cy={slot.y * cell}
+                  r={cell * 0.64}
+                  fill={tone}
+                  fillOpacity={0.2}
+                  stroke={tone}
+                  strokeOpacity={0.55}
+                  strokeWidth={cell * 0.07}
+                />
+              );
+            })}
+          </G>
+        );
+      })}
       {squares.map((square) => {
         const x = square.col * cell;
         const y = square.row * cell;
         const colour = square.colour;
-        const fill =
-          square.kind === 'column' && colour !== null
-            ? ludoColors.players[colour]
-            : square.start && colour !== null
-              ? ludoColors.players[colour]
-              : ludoColors.track;
+        const coloured = (square.kind === 'column' || square.start) && colour !== null;
+        const fill = coloured ? ludoColors.players[colour] : ludoColors.track;
         if (square.kind === 'home') return null;
         return (
           <Rect
             key={`sq-${String(square.col)}-${String(square.row)}`}
-            x={x + 0.5}
-            y={y + 0.5}
-            width={cell - 1}
-            height={cell - 1}
+            x={x + cell * 0.02}
+            y={y + cell * 0.02}
+            width={cell * 0.96}
+            height={cell * 0.96}
             rx={cell * 0.12}
             fill={fill}
             stroke={ludoColors.trackLine}
-            strokeWidth={1}
+            strokeWidth={cell * 0.05}
             opacity={
               square.kind === 'column' && colour !== null && !activeColours.includes(colour)
                 ? 0.35
@@ -127,6 +130,15 @@ const StaticBoard = memo(function StaticBoard({
             fill={ludoColors.star}
           />
         ))}
+      {squares
+        .filter((square) => square.kind === 'track' && square.start)
+        .map((square) => (
+          <Polygon
+            key={`start-${String(square.col)}-${String(square.row)}`}
+            points={starPoints((square.col + 0.5) * cell, (square.row + 0.5) * cell, cell * 0.32)}
+            fill="#FFFFFF"
+          />
+        ))}
       {/* The centre: one triangle per colour pointing at the middle. */}
       {[
         { colour: 0, points: `${6 * cell},${6 * cell} ${mid},${mid} ${6 * cell},${9 * cell}` },
@@ -138,11 +150,12 @@ const StaticBoard = memo(function StaticBoard({
           key={`tri-${String(triangle.colour)}`}
           points={triangle.points}
           fill={ludoColors.players[triangle.colour]}
-          stroke={ludoColors.trackLine}
-          strokeWidth={1}
+          stroke="#FFFFFF"
+          strokeWidth={cell * 0.06}
           opacity={activeColours.includes(triangle.colour) ? 1 : 0.35}
         />
       ))}
+      <Circle cx={mid} cy={mid} r={cell * 0.3} fill="#FFFFFF" />
     </Svg>
   );
 });
@@ -240,12 +253,24 @@ const TokenView = memo(function TokenView({ spot, cell, canPress, reduced, onPre
               height: diameter,
               borderRadius: diameter / 2,
               backgroundColor: ludoColors.players[spot.colour],
-              borderColor: canPress ? theme.colors.textPrimary : ludoColors.tokenInk,
+              borderColor: canPress ? '#FFFFFF' : ludoColors.tokenInk,
               borderWidth: canPress ? 3 : 2,
             },
             ring,
           ]}
         >
+          <View
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              top: diameter * 0.08,
+              left: diameter * 0.16,
+              width: diameter * 0.3,
+              height: diameter * 0.16,
+              borderRadius: diameter * 0.1,
+              backgroundColor: 'rgba(255,255,255,0.5)',
+            }}
+          />
           <Text style={[styles.number, { fontSize: diameter * 0.5 }]}>{spot.token + 1}</Text>
         </Animated.View>
       </Pressable>
@@ -280,11 +305,16 @@ export function LudoBoard({ ludo, width, movable, mySeat, reduced, onTokenPress 
   const mine = ludo.colours[mySeat];
   return (
     <View
-      style={{ width, height: width }}
+      style={[
+        styles.frame,
+        { width: width + FRAME * 2, height: width + FRAME * 2, padding: FRAME },
+      ]}
       accessibilityLabel={`Ludo board. You are ${mine === undefined ? 'a spectator' : colourName(mine)}.`}
     >
-      <StaticBoard cell={cell} activeColours={ludo.colours} />
-      <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+      <View style={{ width, height: width, borderRadius: 12, overflow: 'hidden' }}>
+        <StaticBoard cell={cell} activeColours={ludo.colours} />
+      </View>
+      <View style={[StyleSheet.absoluteFill, { padding: FRAME }]} pointerEvents="box-none">
         {ordered.map((spot) => (
           <TokenView
             key={`${String(spot.seat)}-${String(spot.token)}`}
@@ -301,6 +331,16 @@ export function LudoBoard({ ludo, width, movable, mySeat, reduced, onTokenPress 
 }
 
 const styles = StyleSheet.create({
+  frame: {
+    alignSelf: 'center',
+    backgroundColor: ludoColors.frame,
+    borderRadius: 22,
+    shadowColor: ludoColors.frame,
+    shadowOpacity: 0.28,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 8,
+  },
   token: { position: 'absolute', left: 0, top: 0 },
   fill: { flex: 1 },
   disc: { alignItems: 'center', justifyContent: 'center' },
