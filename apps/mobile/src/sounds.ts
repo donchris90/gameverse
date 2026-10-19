@@ -1,5 +1,5 @@
 import type { SoundName } from '@gameverse/shared-types';
-import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from 'expo-audio';
+import type { AudioPlayer } from 'expo-audio';
 import * as SecureStore from 'expo-secure-store';
 import { useEffect, useState } from 'react';
 
@@ -23,6 +23,24 @@ const SOURCES: Record<SoundName, number> = {
   lose: require('../assets/sounds/lose.wav') as number,
   draw: require('../assets/sounds/draw.wav') as number,
 };
+
+type AudioModule = typeof import('expo-audio');
+let audio: AudioModule | null | undefined;
+
+/**
+ * expo-audio is a native module. On a dev build made before it was added, importing it throws, so
+ * it is loaded on first use and a failure just means the app stays silent (never a crash).
+ */
+function audioModule(): AudioModule | null {
+  if (audio !== undefined) return audio;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    audio = require('expo-audio') as AudioModule;
+  } catch {
+    audio = null;
+  }
+  return audio;
+}
 
 const KEY = 'sound.enabled';
 type Listener = (on: boolean) => void;
@@ -77,14 +95,19 @@ export function playSound(name: SoundName): void {
   void (async () => {
     try {
       if (!(await loadPreference())) return;
+      const module = audioModule();
+      if (!module) return;
       if (!modeSet) {
         modeSet = true;
         // Effects never stop or silence voice chat or the player's music, and obey the silent switch.
-        await setAudioModeAsync({ playsInSilentMode: false, interruptionMode: 'mixWithOthers' });
+        await module.setAudioModeAsync({
+          playsInSilentMode: false,
+          interruptionMode: 'mixWithOthers',
+        });
       }
       let player = players.get(name);
       if (!player) {
-        player = createAudioPlayer(SOURCES[name]);
+        player = module.createAudioPlayer(SOURCES[name]);
         players.set(name, player);
       }
       await player.seekTo(0);
