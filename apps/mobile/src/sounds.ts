@@ -1,4 +1,5 @@
 import type { SoundName } from '@gameverse/shared-types';
+import { requireOptionalNativeModule } from 'expo';
 import type { AudioPlayer } from 'expo-audio';
 import * as SecureStore from 'expo-secure-store';
 import { useEffect, useState } from 'react';
@@ -34,6 +35,11 @@ let audio: AudioModule | null | undefined;
 function audioModule(): AudioModule | null {
   if (audio !== undefined) return audio;
   try {
+    // Ask for the native side first: requiring expo-audio without it logs a red error in dev.
+    if (!requireOptionalNativeModule('ExpoAudio')) {
+      audio = null;
+      return audio;
+    }
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     audio = require('expo-audio') as AudioModule;
   } catch {
