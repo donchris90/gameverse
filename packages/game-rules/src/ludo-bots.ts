@@ -48,7 +48,7 @@ function baseScore(move: LudoMove, colour: number): number {
   if (move.captures !== null) score += 100;
   if (move.reachesHome) score += 90;
   if (move.entersFromBase) score += 70;
-  if (move.to >= 52 && !move.reachesHome) score += 40; // safe in the home column
+  if (move.to > LAST_TRACK_STEP && !move.reachesHome) score += 40; // safe in the home column
   const square = trackSquare(colour, move.to);
   if (square !== null && isSafeSquare(square)) score += 25;
   return score;

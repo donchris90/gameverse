@@ -3,11 +3,11 @@
  * game. Everything is expressed on a 15 x 15 grid of cells, and points are in cell units (the
  * centre of cell column 3, row 6 is x 3.5, y 6.5), so a screen just multiplies by its cell size.
  *
- * The track is the usual cross-shaped ring of 52 squares, clockwise. Colour 0 starts at the top of
- * the left arm and its home column runs along the middle row; the other colours are the same
+ * The track is the usual cross-shaped ring of 52 squares, clockwise. Colour 0 starts on the second
+ * box of the left arm (as in the RRYDA game) and its home column runs along the middle row; the other colours are the same
  * picture turned a quarter turn each (top, right, bottom). That matches the rules exactly: a token
  * at relative position p stands on track square (13 * colour + p) % 52, and the last track square
- * (p 51) is the one beside the entrance to its own home column.
+ * (p 50) is the one beside the entrance to its own home column.
  */
 import {
   HOME_POSITION,
@@ -41,22 +41,22 @@ const range = (from: number, to: number): number[] => {
 
 function buildTrack(): readonly LudoCell[] {
   return [
-    cell(0, 6), // 0: colour 0 starts here
-    ...range(1, 5).map((c) => cell(c, 6)),
+    ...range(1, 5).map((c) => cell(c, 6)), // 0 is colour 0's start: the SECOND box of the arm
     ...range(5, 0).map((r) => cell(6, r)),
     cell(7, 0),
-    cell(8, 0), // 13: colour 1 starts here
-    ...range(1, 5).map((r) => cell(8, r)),
+    cell(8, 0),
+    ...range(1, 5).map((r) => cell(8, r)), // 13: colour 1 starts here
     ...range(9, 14).map((c) => cell(c, 6)),
     cell(14, 7),
-    cell(14, 8), // 26: colour 2 starts here
-    ...range(13, 9).map((c) => cell(c, 8)),
+    cell(14, 8),
+    ...range(13, 9).map((c) => cell(c, 8)), // 26: colour 2 starts here
     ...range(9, 14).map((r) => cell(8, r)),
     cell(7, 14),
-    cell(6, 14), // 39: colour 3 starts here
-    ...range(13, 9).map((r) => cell(6, r)),
+    cell(6, 14),
+    ...range(13, 9).map((r) => cell(6, r)), // 39: colour 3 starts here
     ...range(5, 0).map((c) => cell(c, 8)),
-    cell(0, 7), // 51: the square before colour 0's start, beside its home column
+    cell(0, 7), // 50: the last square a colour 0 token uses, beside its home column
+    cell(0, 6), // 51: the edge box behind colour 0's start; colour 0 never steps on it
   ];
 }
 

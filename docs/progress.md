@@ -482,3 +482,15 @@ One full integration run had a single `concurrency-matches` failure with the err
 - Verified: turbo gate Tasks: 22 successful, 22 total; design-system contrast tests (28) pass; shared-types 190 tests. I also drew both screens in a browser with react-native-web (scratch tool, not in the repo) and looked at the pictures: Ayo board and the Ludo board match the RRYDA look. That is a picture on a desktop browser, not the phone.
 - Not done / not verified: not seen on a phone; the replay timing feel; RRYDA's sound effects (our app has no audio module, adding one needs a new native dependency and a new dev build, so it is left out); RRYDA's dice art and the Ludo token walking animation were not changed; RRYDA's Ayo "Party Room" spectator view.
 - Owner action: after pulling, rebuild the shared packages (`pnpm exec turbo run build --filter=@gameverse/shared-types --filter=@gameverse/game-rules --filter=@gameverse/design-system --env-mode=loose`) and restart Expo with `-c`.
+
+## Slice 9A: Ludo on the RRYDA path (owner 2026-10-19; unit and server tests run, not seen on a phone)
+
+Changed: tokens start on the second box of their arm; path is 56 steps (ring 0..50, lane 51..55, home 56). Edited `ludo.ts`, `ludo-bots.ts`, `ludo-board.ts` geometry, `shared-types` `ludo-ui.ts`/`matches.ts`.
+Tests edited only because the rule numbers changed (none skipped or loosened): `ludo.spec.ts` (last ring square 51→50, lane 52..56→51..55, home 57→56), `ludo-bots.spec.ts` (positions 55→54, 51→50), `ludo-board.spec.ts` (start squares now 1,6 / 8,1 / 13,8 / 6,13; home-column chain; unused box behind the start now asserted), `shared-types/src/ludo-ui.spec.ts` (home/lane numbers).
+Real results:
+
+- `cd packages/game-rules && pnpm exec vitest run` → 9 files, 206 tests passed.
+- `cd packages/shared-types && pnpm exec vitest run` → 15 files, 190 tests passed.
+- `cd apps/api && ... vitest run --config ./vitest.config.e2e.ts ludo` → 3 files, 60 tests passed.
+  Full gate, smoke and prettier results are added below after the run.
+- Full gate `PRISMA_SCHEMA_ENGINE_BINARY=/bin/true pnpm exec turbo run lint typecheck build test --env-mode=loose --continue` → 22/22 tasks successful. `npx prettier --check .` → all files formatted. Full integration suite and smoke-dist not re-run for this slice (only the ludo integration files, above).

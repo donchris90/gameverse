@@ -69,12 +69,13 @@ describe('board geometry', () => {
     expect(trackSquare(1, 0)).toBe(13);
     expect(trackSquare(2, 5)).toBe(31);
     expect(trackSquare(3, 20)).toBe((39 + 20) % 52);
-    expect(trackSquare(1, 51)).toBe(12); // the square just before its own start
+    expect(trackSquare(1, 50)).toBe(11); // its last track square; square 12, just behind its start, is never used
+    expect(trackSquare(1, 51)).toBeNull(); // 51 is the first home-column position
   });
 
   it('keeps base, the home column and home off the shared track', () => {
     expect(trackSquare(0, IN_BASE)).toBeNull();
-    expect(trackSquare(0, 52)).toBeNull();
+    expect(trackSquare(0, 51)).toBeNull();
     expect(trackSquare(0, HOME_POSITION)).toBeNull();
   });
 
@@ -171,8 +172,8 @@ describe('moving', () => {
   });
 
   it('moves into the home column and stops at home only on the exact number', () => {
-    const near = stateWith(2, withSeat(allBase(2), 0, [50, 55, IN_BASE, IN_BASE]));
-    // 3 from 50 enters the column; 3 from 55 would overshoot home (57)
+    const near = stateWith(2, withSeat(allBase(2), 0, [49, 54, IN_BASE, IN_BASE]));
+    // 3 from 49 enters the column; 3 from 54 would overshoot home (56)
     const rolled = rolling(near, 0, 3).state;
     expect(legalLudoMoves(rolled).map((m) => m.token)).toEqual([0]);
     const exact = rolling(near, 0, 2).state;
@@ -183,7 +184,7 @@ describe('moving', () => {
   });
 
   it('a token that cannot use the roll without overshooting stays; if none can move the turn passes', () => {
-    const stuck = stateWith(2, withSeat(allBase(2), 0, [56, IN_BASE, IN_BASE, IN_BASE]));
+    const stuck = stateWith(2, withSeat(allBase(2), 0, [55, IN_BASE, IN_BASE, IN_BASE]));
     const { state, events } = rolling(stuck, 0, 5);
     expect(events.map((e) => e.type)).toEqual(['ROLLED', 'NO_MOVE', 'TURN']);
     expect(state.toMove).toBe(1);
@@ -328,7 +329,7 @@ describe('capturing, safe squares and blocks', () => {
 
 describe('finishing and placings', () => {
   const almost = (players: LudoPlayerCount, seat: number): Tokens =>
-    withSeat(allBase(players), seat, [HOME_POSITION, HOME_POSITION, HOME_POSITION, 56]);
+    withSeat(allBase(players), seat, [HOME_POSITION, HOME_POSITION, HOME_POSITION, 55]);
 
   it('a seat with all four tokens home is placed, and play goes on for the rest', () => {
     const start = stateWith(3, almost(3, 0), { toMove: 0 });
@@ -343,7 +344,7 @@ describe('finishing and placings', () => {
   it('finished seats are skipped, and the game ends when only one seat is left', () => {
     let state = stateWith(
       3,
-      withSeat(almost(3, 0), 1, [HOME_POSITION, HOME_POSITION, HOME_POSITION, 56]),
+      withSeat(almost(3, 0), 1, [HOME_POSITION, HOME_POSITION, HOME_POSITION, 55]),
       {
         toMove: 0,
       },
@@ -702,9 +703,9 @@ describe('property tests', () => {
 
 describe('when the match ends, and who gets the pot', () => {
   const home = [HOME_POSITION, HOME_POSITION, HOME_POSITION, HOME_POSITION];
-  /** Seat `seat` has three tokens home and one at 56, so a 1 finishes it. */
+  /** Seat `seat` has three tokens home and one at 55, so a 1 finishes it. */
   const nearlyDone = (tokens: Tokens, seat: number): Tokens =>
-    withSeat(tokens, seat, [HOME_POSITION, HOME_POSITION, HOME_POSITION, 56]);
+    withSeat(tokens, seat, [HOME_POSITION, HOME_POSITION, HOME_POSITION, 55]);
 
   it('two players: the first to finish ends it and wins', () => {
     const tokens = nearlyDone(allBase(2), 0);

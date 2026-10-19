@@ -54,10 +54,10 @@ describe('the track', () => {
 
   it('puts each start square at the edge of its own arm, in the colour order of the rules', () => {
     expect([0, 1, 2, 3].map((c) => key(TRACK_CELLS[startSquare(c)] as LudoCell))).toEqual([
-      '0,6',
-      '8,0',
-      '14,8',
-      '6,14',
+      '1,6',
+      '8,1',
+      '13,8',
+      '6,13',
     ]);
   });
 
@@ -74,8 +74,8 @@ describe('home columns', () => {
     'colour %i: last track square, five column squares, home, in a chain',
     (colour) => {
       const chain = [
-        cellOf(colour, 51) as LudoCell,
-        ...[52, 53, 54, 55, 56].map((p) => cellOf(colour, p) as LudoCell),
+        cellOf(colour, 50) as LudoCell,
+        ...[51, 52, 53, 54, 55].map((p) => cellOf(colour, p) as LudoCell),
         cellOf(colour, HOME_POSITION) as LudoCell,
       ];
       chain.forEach((c, i) => {
@@ -91,12 +91,14 @@ describe('home columns', () => {
     expect(new Set(all).size).toBe(TRACK_LENGTH + 20 + 4);
   });
 
-  it('enters from the last track square (the one before the start), as the rules say', () => {
+  it('enters from its last track square (p 50), and never uses the box behind its start', () => {
     for (const colour of [0, 1, 2, 3]) {
-      const last = cellOf(colour, 51) as LudoCell;
-      const start = cellOf(colour, 0) as LudoCell;
-      expect(adjacent(last, start)).toBe(true);
-      expect(trackSquare(colour, 51)).toBe((startSquare(colour) + 51) % TRACK_LENGTH);
+      const last = cellOf(colour, 50) as LudoCell;
+      const entrance = HOME_COLUMN_CELLS[colour]?.[0] as LudoCell;
+      expect(adjacent(last, entrance)).toBe(true);
+      expect(trackSquare(colour, 50)).toBe((startSquare(colour) + 50) % TRACK_LENGTH);
+      const unused = (startSquare(colour) + 51) % TRACK_LENGTH;
+      for (let p = 0; p <= 50; p += 1) expect(trackSquare(colour, p)).not.toBe(unused);
     }
   });
 });
@@ -125,8 +127,8 @@ describe('bases and token points', () => {
 
   it('uses the base for a token in the base and a cell centre otherwise', () => {
     expect(tokenPoint(1, 2, IN_BASE)).toEqual(basePoint(1, 2));
-    expect(tokenPoint(0, 0, 0)).toEqual({ x: 0.5, y: 6.5 });
-    expect(() => tokenPoint(0, 0, 58)).toThrow(RangeError);
+    expect(tokenPoint(0, 0, 0)).toEqual({ x: 1.5, y: 6.5 });
+    expect(() => tokenPoint(0, 0, 57)).toThrow(RangeError);
   });
 
   it('every legal position lands inside the board', () => {
@@ -192,25 +194,25 @@ describe('layoutTokens', () => {
     // Both are still within the square they share.
     for (const s of [a, b]) {
       expect(Math.abs((s?.x ?? 0) - 8.5)).toBeLessThan(0.5);
-      expect(Math.abs((s?.y ?? 0) - 0.5)).toBeLessThan(0.5);
+      expect(Math.abs((s?.y ?? 0) - 1.5)).toBeLessThan(0.5);
     }
   });
 
   it('keeps four tokens on one square all distinct', () => {
-    const spots = layoutTokens([[57, 57, 57, 57]], [0]);
+    const spots = layoutTokens([[HOME_POSITION, HOME_POSITION, HOME_POSITION, HOME_POSITION]], [0]);
     expect(new Set(spots.map((s) => `${String(s.x)},${String(s.y)}`)).size).toBe(4);
   });
 
   it('leaves a lone token exactly at the centre of its square', () => {
     const [spot] = layoutTokens([[5, -1, -1, -1]], [0]);
-    expect(spot).toMatchObject({ x: 5.5, y: 6.5, scale: 1 });
+    expect(spot).toMatchObject({ x: 6.5, y: 5.5, scale: 1 });
   });
 });
 
 describe('movePath', () => {
   it('hops one square at a time for a forward move', () => {
     expect(movePath(3, 6)).toEqual([4, 5, 6]);
-    expect(movePath(50, 53)).toEqual([51, 52, 53]);
+    expect(movePath(49, 52)).toEqual([50, 51, 52]);
   });
   it('enters the board in one step and sends a captured token straight back', () => {
     expect(movePath(IN_BASE, 0)).toEqual([0]);

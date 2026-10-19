@@ -9,7 +9,7 @@ Ludo has many house variants. These follow the common international/Nigerian fam
 - 2, 3 or 4 players. Each has 4 tokens of one colour (red, blue, yellow, green), seated clockwise around the board.
 - Board: a cross-shaped track of **52 shared squares**, a **home column of 6 squares** leading to the centre for each colour, and a **base** (yard) in each corner where tokens wait.
 - Each colour has a **start square** on the track (the square just outside its base). Start squares are 13 squares apart. With 2 players, seats use opposite colours (red and yellow); with 3, three of the four colours; seat order decides who moves first after the random opener.
-- A token travels 51 squares along the track from its start square, then up its own 6-square home column; the last square of the column is **home** (the centre). Total path per token: 57 steps from the start square to home.
+- A token enters on its **start square, the second box of its arm** (as in RRYDA), travels 51 squares along the track (positions 0..50; the box behind its own start is never used), then up its own 5-square home column (51..55); the centre is **home** (56). Total path per token: 56 steps from the start square to home.
 
 ## 2. Turn order and dice
 

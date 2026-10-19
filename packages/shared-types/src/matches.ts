@@ -96,7 +96,7 @@ export interface LudoMoveView {
 
 /**
  * Ludo state as the phone sees it. Positions are per token and relative to the owner: -1 base,
- * 0-51 the shared track from the owner's start square, 52-56 the home column, 57 home. The
+ * 0-50 the shared track from the owner's start square, 51-55 the home column, 56 home. The
  * server computes `moves`, so the phone never has to know the rules.
  */
 export interface LudoView {

@@ -64,7 +64,7 @@ describe('ludo bots', () => {
   });
 
   it.each<BotLevel>(['medium', 'hard'])('%s reaches home when it can', (level) => {
-    const state = rolled([[55, 20, IN_BASE, IN_BASE], [...base4]], 2);
+    const state = rolled([[54, 20, IN_BASE, IN_BASE], [...base4]], 2);
     expect(chooseLudoMove(state, level, () => 0)).toBe(0);
   });
 
@@ -174,7 +174,7 @@ describe('ludo bots', () => {
   it.each<BotLevel>(['medium', 'hard'])(
     '%s finishing a token beats bringing a new one out',
     (level) => {
-      const state = rolled([[51, IN_BASE, IN_BASE, IN_BASE], [...base4]], 6);
+      const state = rolled([[50, IN_BASE, IN_BASE, IN_BASE], [...base4]], 6);
       expect(chooseLudoMove(state, level, () => 0)).toBe(0);
     },
   );
@@ -212,12 +212,12 @@ describe('ludo bots', () => {
   });
 
   it('hard does not fear an opponent token that is about to turn into its home lane', () => {
-    // The opponent token (p 51) stands on square 25, its last ring square. Landing on square 27
-    // (A: 23 + 4) is two squares ahead of it, but it can only go into its own lane, never to 27.
+    // The opponent token (p 50) stands on square 24, its last ring square. Landing on square 27
+    // (A: 23 + 4) is three squares ahead of it, but it can only go into its own lane, never to 27.
     const state = rolled(
       [
         [23, 2, IN_BASE, IN_BASE],
-        [51, IN_BASE, IN_BASE, IN_BASE],
+        [50, IN_BASE, IN_BASE, IN_BASE],
       ],
       4,
     );

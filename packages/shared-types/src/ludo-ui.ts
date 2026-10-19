@@ -403,7 +403,7 @@ export function seatSummaries(view: MatchView): SeatSummary[] {
       colourName: colourName(colour),
       name: ludoName(view, player.seat),
       isMe: player.seat === view.mySeat,
-      home: (ludo.tokens[player.seat] ?? []).filter((position) => position === 57).length,
+      home: (ludo.tokens[player.seat] ?? []).filter((position) => position === 56).length,
       state,
       place: finishedAt !== -1 ? finishedAt + 1 : placing !== -1 && !isOut ? placing + 1 : null,
       connected: player.bot !== null || player.connected,
@@ -411,15 +411,15 @@ export function seatSummaries(view: MatchView): SeatSummary[] {
   });
 }
 
-/** What a screen reader says for a token. `position` is the server's value: -1 base, 57 home. */
+/** What a screen reader says for a token. `position` is the server's value: -1 base, 56 home. */
 export function tokenDescription(colour: number, token: number, position: number): string {
   const where =
     position === -1
       ? 'in its base'
-      : position === 57
+      : position === 56
         ? 'home'
-        : position >= 52
-          ? `in the home column, ${String(57 - position)} to go`
+        : position >= 51
+          ? `in the home column, ${String(56 - position)} to go`
           : `on the track, ${String(position)} squares from its start`;
   return `${colourName(colour)} token ${String(token + 1)}, ${where}`;
 }

@@ -7,9 +7,10 @@
  *
  * Positions (`p`, per token, relative to its owner):
  *   -1       in the base
- *   0..51    on the shared 52-square track; 0 is the owner's start square
- *   52..56   in the owner's private home column
- *   57       home (finished)
+ *   0..50    on the shared 52-square track; 0 is the owner's start square (the second box of the arm).
+ *            A token walks 51 squares and never steps on the square directly behind its own start.
+ *   51..55   in the owner's private home column
+ *   56       home (finished)
  */
 
 export type LudoSeat = 0 | 1 | 2 | 3;
@@ -18,8 +19,8 @@ export type LudoPlayerCount = 2 | 3 | 4;
 export const TRACK_LENGTH = 52;
 export const TOKENS_PER_PLAYER = 4;
 export const IN_BASE = -1;
-export const LAST_TRACK_STEP = 51;
-export const HOME_POSITION = 57;
+export const LAST_TRACK_STEP = 50;
+export const HOME_POSITION = 56;
 export const START_SPACING = 13;
 /** Squares after a start square that are also safe (the starred squares). */
 export const STAR_OFFSET = 8;

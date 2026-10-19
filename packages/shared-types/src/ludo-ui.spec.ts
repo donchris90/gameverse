@@ -432,9 +432,9 @@ describe('seatSummaries', () => {
       {
         toMove: 1,
         tokens: [
-          [57, 57, 3, -1],
+          [56, 56, 3, -1],
           [-1, -1, -1, -1],
-          [57, -1, -1, -1],
+          [56, -1, -1, -1],
         ],
       },
     );
@@ -495,10 +495,10 @@ describe('tokenDescription', () => {
   it.each([
     [-1, 'Red token 1, in its base'],
     [0, 'Red token 1, on the track, 0 squares from its start'],
-    [51, 'Red token 1, on the track, 51 squares from its start'],
-    [52, 'Red token 1, in the home column, 5 to go'],
-    [56, 'Red token 1, in the home column, 1 to go'],
-    [57, 'Red token 1, home'],
+    [50, 'Red token 1, on the track, 50 squares from its start'],
+    [51, 'Red token 1, in the home column, 5 to go'],
+    [55, 'Red token 1, in the home column, 1 to go'],
+    [56, 'Red token 1, home'],
   ])('describes position %i', (position, text) => {
     expect(tokenDescription(0, 0, position)).toBe(text);
   });
