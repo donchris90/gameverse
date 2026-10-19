@@ -138,6 +138,8 @@ export function AyoMatch({
   useEffect(() => {
     if (!game?.last || game.plies <= seenPlies.current) return;
     seenPlies.current = game.plies;
+    // A server that has not been updated sends no replay data: show the board without a replay.
+    if (!game.last.before || !Array.isArray(game.last.steps)) return;
     if (reduced || game.last.steps.length > 400) return;
     queue.current.push(game.last);
     void drain();
