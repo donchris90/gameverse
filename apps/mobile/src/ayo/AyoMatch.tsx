@@ -251,6 +251,7 @@ export function AyoMatch({
       </View>
 
       <Text style={styles.round}>Round {game.round}</Text>
+      {coinLine && match.status !== 'COMPLETED' ? <Body muted>{coinLine}</Body> : null}
       {note ? <Body muted>{note}</Body> : null}
       <View accessibilityLiveRegion="polite">
         <Text style={[styles.headline, { color: TONE_COLOR[status.tone] }]}>{status.headline}</Text>

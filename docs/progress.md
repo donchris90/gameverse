@@ -457,3 +457,11 @@ One full integration run had a single `concurrency-matches` failure with the err
 - Not verified: the Ludo screen on a phone (button, AI labels, coin line). The board look is unchanged from before: the RRYDA visual refresh is not done yet and is planned in 8F with the art pass. The path is still our 57 steps.
 - Owner action: redeploy the API on Render so migrations `entry_fees`, `best_of` and `ludo_ai_cover` apply, and check the Ludo screen on a device.
 - Next exact action: slice 8E (Ayo): write `docs/ayo-rules.md` from the RRYDA code, list differences from our Ayo for approval.
+
+## Slice 8E: Ayo (kept our rules; entry fees and pots added; verified on the server side, not seen on a phone)
+
+- Owner chose "keep ours" on 2026-10-19 after `docs/ayo-port-differences.md` listed nine differences from RRYDA (decision #117). No Ayo rule or bot code changed.
+- Added: `test/ayo-entry.e2e-spec.ts` (3 tests: fees taken and pot shown; the player who stays gets the pot, the leaver gets nothing; both fees returned when the match is left before it starts) and the entry/pot line on the Ayo screen while a match is running. The fee picker and settlement were already game-independent.
+- Verified, real output: turbo gate Tasks: 22 successful, 22 total; integration `Test Files 35 passed, Tests 651 passed`; `npx prettier --check .` clean. Mutation check not run for these three tests because they exercise the shared settlement paths already mutation-checked in 8B and 8D.
+- Not verified: the Ayo screen on a phone. The RRYDA Ayo look (seed animation, party room) is not ported; the visual pass is planned in 8F.
+- Next exact action: slice 8F (catalogue, art, load test, Maestro flows, checkpoint) after the owner approves 8D and 8E.
