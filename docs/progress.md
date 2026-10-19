@@ -517,3 +517,11 @@ Real results: see the line added below after the final run.
 - Gate `PRISMA_SCHEMA_ENGINE_BINARY=/bin/true pnpm exec turbo run lint typecheck build test --env-mode=loose --continue` → Tasks: 22 successful, 22 total. `npx prettier --check .` → all formatted. `bash apps/api/scripts/smoke-dist.sh` → "compiled API is up and ready".
 - Full integration suite (`cd apps/api && ... vitest run --config ./vitest.config.e2e.ts`) → first run Test Files 34 passed, 1 failed (`concurrency-matches: 12 ranked matches played and finished in parallel`; failure text not captured); that file then passed 3 times alone, and a later full run → Test Files 35 passed (35), Tests 656 passed (656). Likely cause (not proven): the test's random play loop stops after 80 steps and drawn games are now replayed, so a long series can run out; the loop limit was raised to 250 (an assertion was not touched).
 - Unverified: get-ready/turn-clock feel on a phone.
+
+## Slice 9D: Game Center homepage (owner 2026-10-19; decision #121; not seen on a phone)
+
+Changed: `apps/mobile/app/(tabs)/play.tsx` rebuilt, new `apps/mobile/src/GradientCard.tsx` (react-native-svg gradient, no new native module), `design-system` `gameGradients` + 14 new contrast tests in `tokens.spec.ts` (nothing loosened). All behaviour kept: resume, searching, invites, daily claim, room code with fee confirmation, "Coming soon".
+Real results: `pnpm exec turbo run lint typecheck build test --env-mode=loose --continue` → see line below; design-system tests run (see line below). I drew the screen in a desktop browser with react-native-web (scratch tool, mock data, not in the repo) and looked at the picture. That is not a phone.
+Not done: the other tabs and screens keep the dark look (no full light re-theme); no new RRYDA sound effects or animations.
+
+- Gate `PRISMA_SCHEMA_ENGINE_BINARY=/bin/true pnpm exec turbo run lint typecheck build test --env-mode=loose --continue` → Tasks: 22 successful, 22 total. `cd packages/design-system && pnpm exec vitest run` → 1 file, 40 tests passed. `npx prettier --check .` → all formatted. API unchanged since the last full integration run (35 files, 656 tests).

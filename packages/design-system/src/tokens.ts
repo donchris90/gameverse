@@ -154,6 +154,21 @@ export const gradients = {
   midnight: ['#0B0C24', '#15173A'],
 } as const;
 
+/**
+ * Game Center card gradients (the RRYDA look: vivid two-stop gradients). Every stop keeps white
+ * text at 4.5:1 or better; tokens.spec.ts checks it.
+ */
+export const gameGradients = {
+  tictactoe: ['#D81B60', '#C2410C'],
+  ludo: ['#0B6BB5', '#5B3DF5'],
+  draughts: ['#0A7B4F', '#1F6FE0'],
+  ayo: ['#B45309', '#8A4B00'],
+  /** Daily bonus coins card. */
+  coins: ['#B45309', '#A33B12'],
+  /** Level / header accent. */
+  brand: ['#7B3FC4', '#5B3DF5'],
+} as const;
+
 export const theme = {
   name: 'dark' as const,
   colors: darkColors,

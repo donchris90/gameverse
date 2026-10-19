@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { contrastRatio, hexToRgb } from './contrast.js';
-import { darkColors, ludoColors, radii, spacing } from './tokens.js';
+import { darkColors, gameGradients, ludoColors, radii, spacing } from './tokens.js';
 
 const AA_NORMAL_TEXT = 4.5;
 const AA_NON_TEXT = 3;
@@ -102,4 +102,14 @@ describe('ludo board colours', () => {
   it('keeps the star squares visible on the track', () => {
     expect(contrastRatio(ludoColors.star, ludoColors.track)).toBeGreaterThanOrEqual(3);
   });
+});
+
+describe('Game Center gradients', () => {
+  for (const [name, stops] of Object.entries(gameGradients)) {
+    for (const stop of stops) {
+      it(`${name} stop ${stop} keeps white text at 4.5:1`, () => {
+        expect(contrastRatio('#FFFFFF', stop)).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+      });
+    }
+  }
 });
