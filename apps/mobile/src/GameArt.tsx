@@ -19,7 +19,7 @@ export const GAME_INFO: Record<GameId, GameInfo> = {
   tictactoe: {
     id: 'tictactoe',
     name: 'Tic-tac-toe',
-    tagline: 'Three in a row wins. One game or best of 3, 20 seconds a turn.',
+    tagline: 'Three in a row wins. One game or best of 3, 15 seconds a turn.',
     tags: ['2 players', '2 min'],
     banner: '#2A1F7A',
   },

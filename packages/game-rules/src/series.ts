@@ -7,27 +7,30 @@ import {
 } from './tictactoe.js';
 
 /**
- * A match is one game or best of three (first to two wins). A turn that runs out of time loses
- * that game. Best of three is the default.
+ * A match is one game or best of three (first to two wins), played the RRYDA way (decision #120):
+ * a drawn game does not count and is played again with the other player opening; three draws in a
+ * row end the match as a draw (the fees are returned). A turn that runs out of time loses that game.
+ * Best of three is the default.
  */
 export type BestOf = 1 | 3;
 export const BEST_OF_VALUES: readonly BestOf[] = [1, 3];
 export const DEFAULT_BEST_OF: BestOf = 3;
-export const SERIES_MAX_GAMES = 3;
 export const WINS_NEEDED = 2;
 
 /** Wins that settle a series of this length. */
 export function winsNeeded(bestOf: BestOf): number {
   return bestOf === 1 ? 1 : WINS_NEEDED;
 }
-export const TURN_TIMER_MS = 20_000;
-export const MAX_CONSECUTIVE_TIMEOUTS = 2;
+/** RRYDA's turn clock for tic-tac-toe. */
+export const TURN_TIMER_MS = 15_000;
+/** Draws in a row after which the match ends as a draw. */
+export const DRAW_REPLAY_LIMIT = 3;
 
 /** A seat is a player's fixed place in the match. Marks move between seats; seats never do. */
 export type Seat = 0 | 1;
 
 export type GameEndReason = 'line' | 'full_board' | 'timeout' | 'forfeit';
-export type SeriesEndReason = 'score' | 'forfeit';
+export type SeriesEndReason = 'score' | 'forfeit' | 'draw_limit';
 export type SeriesPhase = 'playing' | 'between_games' | 'completed';
 
 export interface GameRecord {
@@ -46,8 +49,10 @@ export interface SeriesState {
   readonly gameNumber: number;
   readonly game: TicTacToeState;
   readonly wins: readonly [number, number];
+  /** Drawn games in all (they are replayed and do not count towards the score). */
   readonly draws: number;
-  readonly consecutiveTimeouts: readonly [number, number];
+  /** Drawn games in a row; DRAW_REPLAY_LIMIT of them end the match. */
+  readonly drawStreak: number;
   readonly history: readonly GameRecord[];
   readonly winner: Seat | 'draw' | null;
   readonly endReason: SeriesEndReason | null;
@@ -72,7 +77,7 @@ export function createSeries(firstSeat: Seat = 0, bestOf: BestOf = DEFAULT_BEST_
     game: createGame(),
     wins: [0, 0],
     draws: 0,
-    consecutiveTimeouts: [0, 0],
+    drawStreak: 0,
     history: [],
     winner: null,
     endReason: null,
@@ -98,41 +103,30 @@ function bump(pair: readonly [number, number], seat: Seat): [number, number] {
   return seat === 0 ? [pair[0] + 1, pair[1]] : [pair[0], pair[1] + 1];
 }
 
-function withCount(pair: readonly [number, number], seat: Seat, value: number): [number, number] {
-  return seat === 0 ? [value, pair[1]] : [pair[0], value];
-}
-
 /** Closes the current game with `result`, then decides whether the series is over. */
 function finishGame(
   series: SeriesState,
   game: TicTacToeState,
   result: Seat | 'draw',
   reason: GameEndReason,
-  consecutiveTimeouts: readonly [number, number],
 ): SeriesState {
-  const wins = result === 'draw' ? series.wins : bump(series.wins, result);
-  const draws = result === 'draw' ? series.draws + 1 : series.draws;
   const history = [
     ...series.history,
     { gameNumber: series.gameNumber, firstSeat: series.firstSeat, result, reason },
   ];
-  const base = { ...series, game, wins, draws, history, consecutiveTimeouts };
-
-  const forfeited =
-    reason === 'timeout' &&
-    result !== 'draw' &&
-    consecutiveTimeouts[otherSeat(result)] >= MAX_CONSECUTIVE_TIMEOUTS;
-  if (forfeited) {
-    return { ...base, phase: 'completed', winner: result, endReason: 'forfeit' };
+  if (result === 'draw') {
+    // A draw is simply played again (the other seat opens). Only an endless run of them ends it.
+    const drawStreak = series.drawStreak + 1;
+    const base = { ...series, game, draws: series.draws + 1, drawStreak, history };
+    return drawStreak >= DRAW_REPLAY_LIMIT
+      ? { ...base, phase: 'completed', winner: 'draw', endReason: 'draw_limit' }
+      : { ...base, phase: 'between_games' };
   }
-
-  const target = winsNeeded(series.bestOf);
-  const reachedTarget = wins[0] >= target || wins[1] >= target;
-  if (reachedTarget || series.gameNumber >= series.bestOf) {
-    const winner: Seat | 'draw' = wins[0] === wins[1] ? 'draw' : wins[0] > wins[1] ? 0 : 1;
-    return { ...base, phase: 'completed', winner, endReason: 'score' };
-  }
-  return { ...base, phase: 'between_games' };
+  const wins = bump(series.wins, result);
+  const base = { ...series, game, wins, drawStreak: 0, history };
+  return wins[result] >= winsNeeded(series.bestOf)
+    ? { ...base, phase: 'completed', winner: result, endReason: 'score' }
+    : { ...base, phase: 'between_games' };
 }
 
 /** A seat places its mark. The first mover alternates every game. */
@@ -143,39 +137,32 @@ export function playMove(series: SeriesState, seat: Seat, cell: unknown): Series
   const moved = applyMove(series.game, markOf(series, seat), cell);
   if (!moved.ok) return { ok: false, error: moved.error };
 
-  // Any real move clears that seat's run of timeouts.
-  const consecutiveTimeouts = withCount(series.consecutiveTimeouts, seat, 0);
   const game = moved.state;
   if (game.status === 'won' && game.winner !== null) {
     return {
       ok: true,
-      series: finishGame(series, game, seatOf(series, game.winner), 'line', consecutiveTimeouts),
+      series: finishGame(series, game, seatOf(series, game.winner), 'line'),
     };
   }
   if (game.status === 'draw') {
     return {
       ok: true,
-      series: finishGame(series, game, 'draw', 'full_board', consecutiveTimeouts),
+      series: finishGame(series, game, 'draw', 'full_board'),
     };
   }
-  return { ok: true, series: { ...series, game, consecutiveTimeouts } };
+  return { ok: true, series: { ...series, game } };
 }
 
 /**
- * The turn timer ran out for `seat`. That seat loses the game; two timeouts in a row forfeit the
- * whole series. Only the seat that is actually on turn can time out.
+ * The turn timer ran out for `seat`. That seat loses the game (not the series). Only the seat that
+ * is actually on turn can time out.
  */
 export function timeoutTurn(series: SeriesState, seat: Seat): SeriesResult {
   if (series.phase !== 'playing') return { ok: false, error: 'SERIES_NOT_PLAYING' };
   if (seat !== seatToMove(series)) return { ok: false, error: 'NOT_YOUR_TURN' };
-  const consecutiveTimeouts = withCount(
-    series.consecutiveTimeouts,
-    seat,
-    series.consecutiveTimeouts[seat] + 1,
-  );
   return {
     ok: true,
-    series: finishGame(series, series.game, otherSeat(seat), 'timeout', consecutiveTimeouts),
+    series: finishGame(series, series.game, otherSeat(seat), 'timeout'),
   };
 }
 

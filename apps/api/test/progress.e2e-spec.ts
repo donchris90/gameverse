@@ -132,7 +132,7 @@ describe('ratings, XP, statistics and leaderboards', () => {
       const [a, b] = await twoPlayers();
       const id = await active(a, b);
       const done = await winByTimeouts(a, id, 0);
-      expect(done.endReason).toBe('forfeit');
+      expect(done.endReason).toBe('score');
       expect(done.result?.players.map((p) => p.xp)).toEqual([30, 15]);
       expect(done.result?.players.map((p) => p.ratingAfter)).toEqual([1016, 984]);
     });

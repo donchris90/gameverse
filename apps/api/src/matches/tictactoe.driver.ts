@@ -18,15 +18,23 @@ import { botActionId } from './bot-action-id.js';
 import type { DriverAction, GameDriver, StartResult } from './game-driver.js';
 import { invalidState, seriesError } from './match-errors.js';
 import type { AnySeat, Change, EventDraft } from './match-changes.js';
-import { NEXT_GAME_DELAY_MS } from './matches.constants.js';
 import type { MatchRecord } from './match.view.js';
+
+/** RRYDA: a short pause on the finished board before the next game starts. */
+const GAME_BREAK_MS = 2_500;
+/** RRYDA: "get ready" before game 1, shorter against a bot. The turn clock starts after it. */
+const START_DELAY_MS = 3_000;
+const BOT_START_DELAY_MS = 1_500;
 
 /** The tic-tac-toe series of a match; null for other games and before the match starts. */
 export function seriesOf(match: Pick<GameMatch, 'gameId' | 'state'>): SeriesState | null {
   if (match.gameId !== 'tictactoe' || match.state === null) return null;
   // A series saved before match length existed was always best of three.
-  const saved = match.state as unknown as Omit<SeriesState, 'bestOf'> & { bestOf?: 1 | 3 };
-  return { ...saved, bestOf: saved.bestOf ?? 3 };
+  const saved = match.state as unknown as Omit<SeriesState, 'bestOf' | 'drawStreak'> & {
+    bestOf?: 1 | 3;
+    drawStreak?: number;
+  };
+  return { ...saved, bestOf: saved.bestOf ?? 3, drawStreak: saved.drawStreak ?? 0 };
 }
 
 function toJson(series: SeriesState): Prisma.InputJsonValue {
@@ -41,13 +49,18 @@ function afterSeriesChange(series: SeriesState, events: EventDraft[], now: Date)
     patch.deadlineAt = new Date(now.getTime() + TURN_TIMER_MS);
   } else if (series.phase === 'between_games') {
     patch.deadlineKind = 'NEXT_GAME';
-    patch.deadlineAt = new Date(now.getTime() + NEXT_GAME_DELAY_MS);
+    patch.deadlineAt = new Date(now.getTime() + GAME_BREAK_MS);
   } else {
     patch.status = 'COMPLETED';
     patch.deadlineKind = null;
     patch.deadlineAt = null;
     patch.endedAt = now;
-    patch.endReason = series.endReason === 'forfeit' ? 'forfeit' : 'score';
+    patch.endReason =
+      series.endReason === 'forfeit'
+        ? 'forfeit'
+        : series.endReason === 'draw_limit'
+          ? 'draw_limit'
+          : 'score';
     patch.winnerSeat = series.winner === 'draw' || series.winner === null ? null : series.winner;
     events.push({
       type: 'SERIES_ENDED',
@@ -72,9 +85,13 @@ export const ticTacToeDriver: GameDriver = {
 
   start(match: MatchRecord, now: Date): StartResult {
     const series = createSeries(match.openingSeat as Seat, match.bestOf === 1 ? 1 : 3);
+    const getReady = match.players.some((player) => player.userId === null)
+      ? BOT_START_DELAY_MS
+      : START_DELAY_MS;
     return {
       state: toJson(series),
-      deadlineAt: new Date(now.getTime() + TURN_TIMER_MS),
+      // The turn clock starts after "get ready", so nobody loses time to it.
+      deadlineAt: new Date(now.getTime() + getReady + TURN_TIMER_MS),
       events: [{ type: 'GAME_STARTED', data: { gameNumber: 1, firstSeat: series.firstSeat } }],
     };
   },

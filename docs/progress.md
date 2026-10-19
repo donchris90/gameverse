@@ -507,3 +507,13 @@ Real results:
 - `bash apps/api/scripts/smoke-dist.sh` → "compiled API is up and ready".
 - Gate `PRISMA_SCHEMA_ENGINE_BINARY=/bin/true pnpm exec turbo run lint typecheck build test --env-mode=loose --continue` → Tasks: 22 successful, 22 total. `npx prettier --check .` → all matched files formatted (after formatting ayo.ts and ayo.spec.ts).
 - Unverified: replay speed and feel on a phone; the 20 s turn clock and 60 s grace with real networks.
+
+## Slice 9C: Tic-tac-toe on the RRYDA Ox flow (owner 2026-10-19; decision #120; not seen on a phone)
+
+Changed: `game-rules` `series.ts` (draw replay, 3-draw cap, timeout loses the game only, 15 s clock), `tictactoe.driver.ts` (get-ready 3 s / 1.5 s bot, 2.5 s game break, `draw_limit`), `match.view.ts`, `shared-types` `matches.ts` and `match-ui.ts` (Get ready line, draw-replay line, `isGetReady`), `app/match/[id].tsx` (board locked during get-ready), tagline "15 seconds a turn".
+Tests edited only because the rules changed (none skipped or loosened): `game-rules/series.spec.ts` (new rules), `shared-types/match-ui.spec.ts` (fixture fields + 4 new cases), e2e: `best-of` (single drawn game now replays; new 3-draw refund test), `matches-bot` (turn clock 15 s), `matches` (start clock 3 s + 15 s; three draws end as `draw_limit`; two timeouts now lose a best of three on score, not forfeit; each-player-timeout test also asserts wins 1–1), `progress` (series lost by timeouts ends 'score').
+Real results: see the line added below after the final run.
+
+- Gate `PRISMA_SCHEMA_ENGINE_BINARY=/bin/true pnpm exec turbo run lint typecheck build test --env-mode=loose --continue` → Tasks: 22 successful, 22 total. `npx prettier --check .` → all formatted. `bash apps/api/scripts/smoke-dist.sh` → "compiled API is up and ready".
+- Full integration suite (`cd apps/api && ... vitest run --config ./vitest.config.e2e.ts`) → first run Test Files 34 passed, 1 failed (`concurrency-matches: 12 ranked matches played and finished in parallel`; failure text not captured); that file then passed 3 times alone, and a later full run → Test Files 35 passed (35), Tests 656 passed (656). Likely cause (not proven): the test's random play loop stops after 80 steps and drawn games are now replayed, so a long series can run out; the loop limit was raised to 250 (an assertion was not touched).
+- Unverified: get-ready/turn-clock feel on a phone.

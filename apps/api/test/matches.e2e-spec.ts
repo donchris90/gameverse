@@ -186,8 +186,9 @@ describe('matches (session service over REST)', () => {
       expect(second.deadline?.kind).toBe('TURN');
       const secondsLeft =
         (Date.parse(second.deadline?.at ?? '') - Date.parse(second.serverTime)) / 1000;
-      expect(secondsLeft).toBeGreaterThan(18);
-      expect(secondsLeft).toBeLessThanOrEqual(20);
+      // 3 s "get ready" (RRYDA) plus a 15 s turn that only starts after it.
+      expect(secondsLeft).toBeGreaterThan(15);
+      expect(secondsLeft).toBeLessThanOrEqual(18);
     });
 
     it('pressing ready twice changes nothing', async () => {
@@ -483,7 +484,7 @@ describe('matches (session service over REST)', () => {
       expect(types.at(-1)).toBe('SERIES_ENDED');
     });
 
-    it('goes to a third game when it is 1-1, and a drawn game counts as played', async () => {
+    it('replays drawn games and ends the match as a draw after three in a row', async () => {
       const pair = await startPair();
       await playCells(pair, DRAW);
       await makeDueAndSweep(pair.id);
@@ -494,7 +495,7 @@ describe('matches (session service over REST)', () => {
       expect(view.series?.winner).toBe('draw');
       expect(view.winnerSeat).toBeNull();
       expect(view.series?.draws).toBe(3);
-      expect(view.endReason).toBe('score');
+      expect(view.endReason).toBe('draw_limit');
     });
   });
 
@@ -524,7 +525,7 @@ describe('matches (session service over REST)', () => {
       expect((await eventTypes(pair.id)).filter((type) => type === 'TIMEOUT')).toHaveLength(1);
     });
 
-    it('two timeouts in a row by the same player forfeit the series', async () => {
+    it('timeouts lose only the game they happen in; two lost games still win a best of three', async () => {
       const pair = await startPair();
       await makeDueAndSweep(pair.id); // seat 0 times out in game 1
       await makeDueAndSweep(pair.id); // pause ends, game 2 starts (seat 1 opens)
@@ -534,11 +535,12 @@ describe('matches (session service over REST)', () => {
       await makeDueAndSweep(pair.id); // seat 0 is on turn and times out again
       view = await current(pair);
       expect(view.status).toBe('COMPLETED');
-      expect(view.endReason).toBe('forfeit');
+      expect(view.endReason).toBe('score');
+      expect(view.series?.wins).toEqual([0, 2]);
       expect(view.winnerSeat).toBe(1);
     });
 
-    it('a real move in between resets the timeout count', async () => {
+    it('a timeout by each player leaves the series level and still going', async () => {
       const pair = await startPair();
       await makeDueAndSweep(pair.id); // seat 0 times out in game 1 (seat 1 wins it)
       await makeDueAndSweep(pair.id); // game 2 starts, seat 1 opens
@@ -548,6 +550,7 @@ describe('matches (session service over REST)', () => {
       await makeDueAndSweep(pair.id); // now seat 1 times out: its first timeout in a row
       view = await current(pair);
       expect(view.status).toBe('ACTIVE');
+      expect(view.series?.wins).toEqual([1, 1]);
     });
   });
 

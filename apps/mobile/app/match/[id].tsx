@@ -1,6 +1,7 @@
 import { theme } from '@gameverse/design-system';
 import {
   canMove,
+  isGetReady,
   canPressReady,
   displayName,
   entrySummary,
@@ -87,7 +88,7 @@ export default function MatchScreen() {
   const rematch = rematchState(match);
 
   const onTap = (cell: number) => {
-    if (!canMove(match)) return;
+    if (!canMove(match) || isGetReady(match, deadlineSeconds)) return;
     // The same cell on the same version reuses its action id, so a retry can never double-apply.
     const previous = pendingMove.current;
     const reuse = previous && previous.cell === cell && previous.version === match.version;
@@ -132,7 +133,7 @@ export default function MatchScreen() {
       <PlayerStrip match={match} />
       <TttBoard
         match={match}
-        open={new Set(tappableCells(match))}
+        open={new Set(isGetReady(match, deadlineSeconds) ? [] : tappableCells(match))}
         width={Math.min(width - s.lg * 2, 360)}
         onTap={onTap}
       />

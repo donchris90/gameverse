@@ -5,6 +5,7 @@ import {
   createSeries,
   playMove,
   startNextGame,
+  TURN_TIMER_MS,
   type Seat,
   type SeriesState,
 } from '@gameverse/game-rules';
@@ -170,7 +171,7 @@ describe('bots in matches', () => {
     it('does not move before it has had time to think, and moves once afterwards', async () => {
       const { user, id } = await botOpens();
       const match = await t.prisma.gameMatch.findUniqueOrThrow({ where: { id } });
-      const turnStart = (match.deadlineAt as Date).getTime() - 20_000;
+      const turnStart = (match.deadlineAt as Date).getTime() - TURN_TIMER_MS;
       expect(await service().runBotMoves(new Date(turnStart + BOT_THINK_MS - 1))).toBe(0);
       expect((await view(user, id)).series?.board.every((cell) => cell === null)).toBe(true);
 

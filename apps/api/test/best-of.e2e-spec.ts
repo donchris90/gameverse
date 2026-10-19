@@ -80,10 +80,35 @@ describe('tic-tac-toe: single game or best of three', () => {
     expect(done.series?.phase).toBe('completed');
   });
 
-  it('counts a drawn single game as a drawn match and returns the entry fees', async () => {
+  async function nextGame(id: string) {
+    await t.prisma.gameMatch.update({
+      where: { id },
+      data: { deadlineAt: new Date(Date.now() - 1000) },
+    });
+    await matches().runDueTimers();
+  }
+
+  it('plays a drawn single game again instead of ending the match (RRYDA Ox flow)', async () => {
     const p = await pair(1, 100);
     const done = await play(p, DRAW);
+    expect(done.status).toBe('ACTIVE');
+    expect(done.series?.phase).toBe('between_games');
+    expect(done.series?.drawStreak).toBe(1);
+    await nextGame(p.id);
+    const again = await view(p.a, p.id);
+    expect(again.series?.phase).toBe('playing');
+    expect(again.series?.gameNumber).toBe(2);
+  });
+
+  it('ends a single game as a drawn match after three draws in a row and returns the entry fees', async () => {
+    const p = await pair(1, 100);
+    await play(p, DRAW);
+    await nextGame(p.id);
+    await play(p, DRAW);
+    await nextGame(p.id);
+    const done = await play(p, DRAW);
     expect(done.status).toBe('COMPLETED');
+    expect(done.endReason).toBe('draw_limit');
     expect(done.winnerSeat).toBeNull();
     const wallets = await t.prisma.coinWallet.findMany({
       where: { userId: { in: [p.a.id, p.b.id] } },

@@ -45,6 +45,20 @@ export function myMark(view: MatchView): 'X' | 'O' | null {
   return view.series.firstSeat === view.mySeat ? 'X' : 'O';
 }
 
+/** Seconds each tic-tac-toe turn lasts; the server uses the same number (game-rules TURN_TIMER_MS). */
+export const TTT_TURN_SECONDS = 15;
+
+/**
+ * "Get ready" before game 1: the server starts the turn clock only after it, so while the clock
+ * shows more than a full turn the board is not open yet.
+ */
+export function isGetReady(view: MatchView, turnSecondsLeft: number | null): boolean {
+  const series = view.series;
+  if (series === null || view.status !== 'ACTIVE' || series.phase !== 'playing') return false;
+  if (series.gameNumber !== 1 || series.board.some((cell) => cell !== null)) return false;
+  return turnSecondsLeft !== null && turnSecondsLeft > TTT_TURN_SECONDS;
+}
+
 export function canMove(view: MatchView): boolean {
   return (
     view.status === 'ACTIVE' &&
@@ -100,7 +114,11 @@ function completedLine(view: MatchView, outcome: Outcome): StatusLine {
   const name = displayName(opponentOf(view));
   const reason = view.endReason;
   if (outcome === 'draw') {
-    return { headline: 'The match is a draw', detail: scoreLine(view), tone: 'neutral' };
+    const detail =
+      view.series?.endReason === 'draw_limit'
+        ? `${String(view.series.drawLimit)} drawn games in a row`
+        : scoreLine(view);
+    return { headline: 'The match is a draw', detail, tone: 'neutral' };
   }
   if (outcome === 'win') {
     const detail =
@@ -163,6 +181,13 @@ export function statusLine(view: MatchView, turnSecondsLeft: number | null): Sta
       if (series.phase === 'between_games') {
         return { headline: 'Next game starting…', detail: scoreLine(view), tone: 'neutral' };
       }
+      if (isGetReady(view, turnSecondsLeft)) {
+        return { headline: 'Get ready…', detail: scoreLine(view) || null, tone: 'neutral' };
+      }
+      const drawNote =
+        series.drawStreak > 0
+          ? `Draw – play again (${String(series.drawStreak)}/${String(series.drawLimit)})`
+          : null;
       const timer = turnSecondsLeft === null ? '' : ` · ${String(turnSecondsLeft)}s`;
       if (!opponent.connected && opponent.bot === null) {
         const gone = opponent.reconnectBy
@@ -171,8 +196,12 @@ export function statusLine(view: MatchView, turnSecondsLeft: number | null): Sta
         return { headline: `Waiting for ${name}`, detail: gone, tone: 'warn' };
       }
       return series.seatToMove === view.mySeat
-        ? { headline: `Your turn${timer}`, detail: scoreLine(view), tone: 'good' }
-        : { headline: `${name}'s turn${timer}`, detail: scoreLine(view), tone: 'neutral' };
+        ? { headline: `Your turn${timer}`, detail: drawNote ?? scoreLine(view), tone: 'good' }
+        : {
+            headline: `${name}'s turn${timer}`,
+            detail: drawNote ?? scoreLine(view),
+            tone: 'neutral',
+          };
     }
   }
 }

@@ -15,6 +15,7 @@ import {
   shouldApply,
   statusLine,
   tappableCells,
+  isGetReady,
 } from './match-ui.js';
 
 function player(seat: 0 | 1, over: Partial<MatchPlayerView> = {}): MatchPlayerView {
@@ -43,6 +44,8 @@ function series(over: Partial<MatchSeriesView> = {}): MatchSeriesView {
     winLine: null,
     wins: [0, 0],
     draws: 0,
+    drawStreak: 0,
+    drawLimit: 3,
     history: [],
     winner: null,
     endReason: null,
@@ -297,5 +300,44 @@ describe('rematchState', () => {
     expect(rematchState(done(0, { rematchRequestedBy: [0] }))).toBe('waiting');
     expect(rematchState(done(0, { rematchRequestedBy: [1] }))).toBe('available');
     expect(rematchState(done(0, { rematchMatchId: 'm2' }))).toBe('ready');
+  });
+});
+
+describe('RRYDA Ox flow lines', () => {
+  it('says "Get ready" while the clock shows more than one full turn on an empty first game', () => {
+    const view = match({ series: series({ gameNumber: 1 }) });
+    expect(statusLine(view, 18).headline).toBe('Get ready…');
+    expect(isGetReady(view, 18)).toBe(true);
+    expect(isGetReady(view, 15)).toBe(false);
+    expect(statusLine(view, 15).headline).toBe('Your turn · 15s');
+  });
+
+  it('is never "get ready" once a mark is down or in a later game', () => {
+    const board = Array(9).fill(null) as (string | null)[];
+    board[4] = 'X';
+    expect(isGetReady(match({ series: series({ board }) }), 18)).toBe(false);
+    expect(isGetReady(match({ series: series({ gameNumber: 2 }) }), 18)).toBe(false);
+  });
+
+  it('tells the players a drawn game is played again', () => {
+    const view = match({ series: series({ drawStreak: 1, gameNumber: 2 }) });
+    expect(statusLine(view, 10).detail).toBe('Draw – play again (1/3)');
+  });
+
+  it('explains a match that ended on three draws in a row', () => {
+    const view = match({
+      status: 'COMPLETED',
+      endReason: 'draw_limit',
+      series: series({
+        phase: 'completed',
+        winner: 'draw',
+        endReason: 'draw_limit',
+        drawStreak: 3,
+      }),
+    });
+    expect(statusLine(view, null)).toMatchObject({
+      headline: 'The match is a draw',
+      detail: '3 drawn games in a row',
+    });
   });
 });

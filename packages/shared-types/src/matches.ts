@@ -62,7 +62,11 @@ export interface MatchSeriesView {
   seatToMove: 0 | 1 | null;
   winLine: number[] | null;
   wins: [number, number];
+  /** Drawn games in all; a draw is played again and does not count. */
   draws: number;
+  /** Drawn games in a row, and how many in a row end the match as a draw. */
+  drawStreak: number;
+  drawLimit: number;
   history: {
     gameNumber: number;
     firstSeat: 0 | 1;
@@ -70,7 +74,7 @@ export interface MatchSeriesView {
     reason: 'line' | 'full_board' | 'timeout' | 'forfeit';
   }[];
   winner: 0 | 1 | 'draw' | null;
-  endReason: 'score' | 'forfeit' | null;
+  endReason: 'score' | 'forfeit' | 'draw_limit' | null;
 }
 
 /** One thing that happened in the last change to a Ludo game, for animation. */

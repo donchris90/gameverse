@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  MAX_CONSECUTIVE_TIMEOUTS,
+  DRAW_REPLAY_LIMIT,
+  TURN_TIMER_MS,
   createRematch,
   createSeries,
   forfeitSeries,
@@ -92,76 +93,99 @@ describe('series', () => {
     expect(series.wins).toEqual([2, 1]);
   });
 
-  it('a drawn game still counts as a game played', () => {
+  it('a drawn game does not count: it is played again with the other seat opening', () => {
     let series = playCells(createSeries(0), DRAW);
     expect(series.draws).toBe(1);
+    expect(series.drawStreak).toBe(1);
     expect(series.wins).toEqual([0, 0]);
+    expect(series.phase).toBe('between_games');
+    series = must(startNextGame(series));
+    expect(series.gameNumber).toBe(2);
+    expect(series.firstSeat).toBe(1);
+    expect(series.phase).toBe('playing');
+  });
+
+  it('three draws in a row end the match as a draw', () => {
+    expect(DRAW_REPLAY_LIMIT).toBe(3);
+    let series = playCells(createSeries(0), DRAW);
     series = must(startNextGame(series));
     series = playCells(series, DRAW);
+    expect(series.phase).toBe('between_games');
     series = must(startNextGame(series));
     series = playCells(series, DRAW);
     expect(series.phase).toBe('completed');
     expect(series.winner).toBe('draw');
+    expect(series.endReason).toBe('draw_limit');
+    expect(series.draws).toBe(3);
     expect(seriesScore(series, 0)).toBe(0.5);
     expect(seriesScore(series, 1)).toBe(0.5);
   });
 
-  it('after three games the player with more wins takes a drawn-out series', () => {
+  it('three draws in a row end it as a draw even when one player leads', () => {
     let series = playCells(createSeries(0), FIRST_WINS); // 1-0
-    series = must(startNextGame(series));
-    series = playCells(series, DRAW); // 1-0, one draw
-    series = must(startNextGame(series));
-    series = playCells(series, DRAW);
+    for (let i = 0; i < DRAW_REPLAY_LIMIT; i += 1) {
+      series = must(startNextGame(series));
+      series = playCells(series, DRAW);
+    }
     expect(series.phase).toBe('completed');
+    expect(series.winner).toBe('draw');
     expect(series.wins).toEqual([1, 0]);
-    expect(series.winner).toBe(0);
   });
 
-  it('a timeout loses that game for the seat that timed out', () => {
+  it('a decided game clears the run of draws', () => {
+    let series = playCells(createSeries(0), DRAW);
+    series = must(startNextGame(series));
+    series = playCells(series, DRAW);
+    expect(series.drawStreak).toBe(2);
+    series = must(startNextGame(series));
+    series = playCells(series, FIRST_WINS); // seat 0 opens game 3 and wins
+    expect(series.drawStreak).toBe(0);
+    expect(series.phase).toBe('between_games');
+    expect(series.wins).toEqual([1, 0]);
+    expect(series.draws).toBe(2);
+  });
+
+  it('draws do not stop a series being won: it goes on until a player has two wins', () => {
+    let series = playCells(createSeries(0), FIRST_WINS); // 1-0, game 1
+    series = must(startNextGame(series));
+    series = playCells(series, DRAW); // game 2 drawn
+    series = must(startNextGame(series));
+    expect(series.gameNumber).toBe(3);
+    expect(series.firstSeat).toBe(0);
+    series = playCells(series, FIRST_WINS);
+    expect(series.phase).toBe('completed');
+    expect(series.wins).toEqual([2, 0]);
+    expect(series.winner).toBe(0);
+    expect(series.endReason).toBe('score');
+    expect(series.history).toHaveLength(3);
+  });
+
+  it('a timeout loses that game for the seat that timed out, and the series goes on', () => {
     const series = createSeries(0);
     const after = must(timeoutTurn(series, 0));
     expect(after.wins).toEqual([0, 1]);
     expect(after.history[0]).toMatchObject({ result: 1, reason: 'timeout' });
     expect(after.phase).toBe('between_games');
-    expect(after.consecutiveTimeouts).toEqual([1, 0]);
+    expect(after.endReason).toBeNull();
   });
 
   it('only the seat on turn can time out', () => {
     expect(timeoutTurn(createSeries(0), 1)).toEqual({ ok: false, error: 'NOT_YOUR_TURN' });
   });
 
-  it('a real move clears the run of timeouts', () => {
-    let series = must(timeoutTurn(createSeries(0), 0)); // seat 0 times out in game 1
-    series = must(startNextGame(series)); // seat 1 opens game 2
+  it('a timeout never forfeits the series: the other player needs two game wins', () => {
+    let series = must(timeoutTurn(createSeries(0), 0)); // seat 0 times out: 0-1
+    series = must(startNextGame(series)); // seat 1 opens
     series = must(playMove(series, 1, 4));
-    series = must(playMove(series, 0, 0)); // seat 0 moves: run is cleared
-    expect(series.consecutiveTimeouts).toEqual([0, 0]);
-  });
-
-  it('forfeits when the same seat times out in consecutive games without moving', () => {
-    let series = must(timeoutTurn(createSeries(0), 0)); // g1: seat 0 on turn, times out
-    series = must(startNextGame(series)); // g2: seat 1 opens
-    series = must(timeoutTurn(series, 1)); // seat 1 times out instead
-    expect(series.consecutiveTimeouts).toEqual([1, 1]);
-    expect(series.wins).toEqual([1, 1]);
-    series = must(startNextGame(series)); // g3: seat 0 opens
-    series = must(timeoutTurn(series, 0)); // seat 0's second timeout in a row
-    expect(MAX_CONSECUTIVE_TIMEOUTS).toBe(2);
+    series = must(timeoutTurn(series, 0)); // seat 0 times out again: 0-2
     expect(series.phase).toBe('completed');
     expect(series.winner).toBe(1);
-    expect(series.endReason).toBe('forfeit');
+    expect(series.endReason).toBe('score'); // by wins, not by forfeit
+    expect(series.wins).toEqual([0, 2]);
   });
 
-  it('two consecutive timeouts by one seat end the series before the third game', () => {
-    // Seat 0 times out in game 1, seat 1 opens game 2 and moves, then seat 0 times out again
-    // without having moved in between: its second timeout in a row.
-    let series = must(timeoutTurn(createSeries(0), 0)); // seat 0: 1 timeout
-    series = must(startNextGame(series)); // seat 1 opens g2
-    series = must(playMove(series, 1, 4)); // seat 1 moves
-    series = must(timeoutTurn(series, 0)); // seat 0 on turn, times out again
-    expect(series.phase).toBe('completed');
-    expect(series.winner).toBe(1);
-    expect(series.endReason).toBe('forfeit');
+  it('the turn clock is 15 seconds, as in RRYDA', () => {
+    expect(TURN_TIMER_MS).toBe(15_000);
   });
 
   it('forfeit gives the other seat the series and cannot be repeated', () => {
@@ -197,7 +221,7 @@ describe('series', () => {
     expect(seriesScore(createSeries(), 0)).toBeNull();
   });
 
-  it('never lets a series exceed three games (seeded random play)', () => {
+  it('always finishes under random play, with never more than two wins and a bounded run of draws', () => {
     for (let seed = 1; seed <= 200; seed += 1) {
       let state = seed;
       const rand = (): number => {
@@ -206,25 +230,24 @@ describe('series', () => {
       };
       let series = createSeries(rand() < 0.5 ? 0 : 1);
       let steps = 0;
-      while (series.phase !== 'completed' && steps < 200) {
+      while (series.phase !== 'completed' && steps < 2000) {
         steps += 1;
         if (series.phase === 'between_games') {
           series = must(startNextGame(series));
           continue;
         }
         const seat = seatToMove(series) as Seat;
-        const roll = rand();
-        if (roll < 0.03) series = must(timeoutTurn(series, seat));
+        if (rand() < 0.03) series = must(timeoutTurn(series, seat));
         else {
           const free = series.game.board
             .map((cell, index) => (cell === null ? index : -1))
             .filter((index) => index >= 0);
           series = must(playMove(series, seat, free[Math.floor(rand() * free.length)]));
         }
-        expect(series.gameNumber).toBeLessThanOrEqual(3);
+        expect(series.drawStreak).toBeLessThanOrEqual(DRAW_REPLAY_LIMIT);
+        expect(Math.max(...series.wins)).toBeLessThanOrEqual(2);
       }
       expect(series.phase).toBe('completed');
-      expect(series.history.length).toBeLessThanOrEqual(3);
       expect(series.winner).not.toBeNull();
     }
   });
@@ -247,12 +270,25 @@ describe('a single game (best of 1)', () => {
     expect(done.winner).toBe(1);
   });
 
-  it('ends a drawn game as a drawn match, with no replay', () => {
-    const done = playCells(createSeries(0, 1), DRAW);
-    expect(done.phase).toBe('completed');
-    expect(done.winner).toBe('draw');
-    expect(done.draws).toBe(1);
-    expect(startNextGame(done)).toEqual({ ok: false, error: 'SERIES_NOT_PLAYING' });
+  it('replays a drawn game with the other seat opening, and a third draw in a row ends it', () => {
+    let series = playCells(createSeries(0, 1), DRAW);
+    expect(series.phase).toBe('between_games');
+    expect(series.draws).toBe(1);
+    series = must(startNextGame(series));
+    expect(series.firstSeat).toBe(1);
+    series = playCells(series, SECOND_WINS); // seat 1 opened and loses: seat 0 wins the single game
+    expect(series.phase).toBe('completed');
+    expect(series.winner).toBe(0);
+
+    let stuck = playCells(createSeries(0, 1), DRAW);
+    stuck = must(startNextGame(stuck));
+    stuck = playCells(stuck, DRAW);
+    stuck = must(startNextGame(stuck));
+    stuck = playCells(stuck, DRAW);
+    expect(stuck.phase).toBe('completed');
+    expect(stuck.winner).toBe('draw');
+    expect(stuck.endReason).toBe('draw_limit');
+    expect(startNextGame(stuck)).toEqual({ ok: false, error: 'SERIES_NOT_PLAYING' });
   });
 
   it('is lost by one timeout', () => {

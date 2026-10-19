@@ -5,7 +5,7 @@ import {
   type MatchSeriesView,
   type MatchView,
 } from '@gameverse/shared-types';
-import { seatToMove, type SeriesState } from '@gameverse/game-rules';
+import { DRAW_REPLAY_LIMIT, seatToMove, type SeriesState } from '@gameverse/game-rules';
 import type {
   GameMatch,
   GameMatchPlayer,
@@ -44,6 +44,8 @@ function toSeriesView(series: SeriesState): MatchSeriesView {
     winLine: series.game.winLine === null ? null : [...series.game.winLine],
     wins: [series.wins[0], series.wins[1]],
     draws: series.draws,
+    drawStreak: series.drawStreak,
+    drawLimit: DRAW_REPLAY_LIMIT,
     history: series.history.map((record) => ({
       gameNumber: record.gameNumber,
       firstSeat: record.firstSeat,

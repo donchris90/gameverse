@@ -27,7 +27,7 @@ describe('concurrency: many matches progressing and finishing at the same time',
     (await request(t.server).get(`/v1/matches/${id}`).set(user.auth).expect(200)).body as MatchView;
 
   async function playToTheEnd(a: SocialUser, b: SocialUser, id: string): Promise<MatchView> {
-    for (let guard = 0; guard < 80; guard += 1) {
+    for (let guard = 0; guard < 250; guard += 1) {
       const current = await view(a, id);
       if (current.status === 'COMPLETED') return current;
       const series = current.series;
